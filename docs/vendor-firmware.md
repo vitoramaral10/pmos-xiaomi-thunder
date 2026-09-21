@@ -54,6 +54,32 @@ Paths vary by ROM build; `debugfs -R "ls -l /firmware"` is the way to find
 them. On some builds the connectivity patches are under `/firmware/` and on
 others under `/etc/firmware/`.
 
+## The Wi-Fi NVRAM (MAC address and RF calibration)
+
+Separate from the firmware blobs above, and **not** a file you copy out of the
+stock ROM: it lives in the device's own `nvdata` partition and is unique to
+each unit.
+
+```sh
+mount -o ro /dev/disk/by-partlabel/nvdata /mnt      # READ-ONLY, always
+cp /mnt/APCFG/APRDEB/WIFI /lib/firmware/wifi_nvram.bin
+umount /mnt
+```
+
+Mount it read-only and never write to it. It holds the factory RF calibration
+for this specific radio; there is no way to regenerate it if you corrupt it.
+
+The file is 2050 bytes, with the MAC address at offset 4. It is consumed by
+[`device-scripts/wifi-nvram-push.py`](../device-scripts/wifi-nvram-push.py),
+which hands it to the driver at bring-up.
+
+Because it is per-unit data, **no MAC address or calibration blob belongs in
+this repository** — the script reads whatever the device it runs on has.
+
+Currently gated behind `/etc/thunder-wifi-nvram` and off by default, for
+reasons explained in
+[wifi-bringup.md](wifi-bringup.md#the-factory-mac-solved-mechanism-unusable-in-practice).
+
 ## Installing them
 
 Touchscreen blobs go next to the device APKBUILD before building — see
