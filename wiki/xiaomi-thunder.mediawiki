@@ -46,7 +46,7 @@
 
 <!-- Connectivity Features -->
 | status_wifi      = Y
-| status_bluetooth = N
+| status_bluetooth = Y
 
 <!-- Modem -->
 | status_calls      = N
@@ -55,18 +55,23 @@
 }}
 
 '''Work in progress.''' This is an unofficial downstream port on the vendor
-4.19 kernel. Display, touchscreen, speaker audio and '''Wi-Fi''' work, and
-Weston starts at boot, so the device comes up to a graphical session and
-associates to a network on its own.
+4.19 kernel. Display, touchscreen, speaker audio, '''Wi-Fi''' and
+'''Bluetooth''' work, and Weston starts at boot, so the device comes up to a
+graphical session, associates to a network and brings its Bluetooth controller
+up on its own.
 
-Not working: Bluetooth, modem, cameras and GPU acceleration (the compositor
+Not working: modem, cameras and GPU acceleration (the compositor
 runs on the pixman software renderer). The battery charges but the fuel gauge
 reports no level. '''SSH sessions do not work''' — dropbear accepts the
 connection but never allocates a pty (see [[#Known issues]]).
 
-Wi-Fi is the notable part: MT6833 connectivity has no mainline support, so this
-port reconstructs MediaTek's gen4m stack for the SoC and replaces the Android
-launcher daemon with small userspace services. Do not expect a daily driver.
+Connectivity is the notable part: MT6833 has no mainline support for it, so
+this port reconstructs MediaTek's gen4m stack for the SoC and replaces the
+Android launcher daemon with small userspace services. Bluetooth shares the
+same chip; its vendor driver only exposes a character device for Android's
+stack, so a small bridge presents it to BlueZ through the kernel's virtual HCI
+transport. Bluetooth audio negotiates but does not play — the device has no
+audio session to consume it. Do not expect a daily driver.
 
 == Contributors ==
 * [[User:Vitoramaral10]]

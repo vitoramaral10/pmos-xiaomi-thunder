@@ -76,6 +76,13 @@ which hands it to the driver at bring-up.
 Because it is per-unit data, **no MAC address or calibration blob belongs in
 this repository** — the script reads whatever the device it runs on has.
 
+The Bluetooth address lives in the same place, at
+`/APCFG/APRDEB/BT_Addr` — six bytes, same OUI as the Wi-Fi MAC.
+[`device-scripts/init.d/bluetooth-thunder`](../device-scripts/init.d/bluetooth-thunder)
+extracts it into `/lib/firmware/bt_addr.bin` on first start, again with the
+partition mounted read-only, and the bridge writes it to the controller. The
+same rule applies: per-unit data, never committed.
+
 Currently gated behind `/etc/thunder-wifi-nvram` and off by default, for
 reasons explained in
 [wifi-bringup.md](wifi-bringup.md#the-factory-mac-solved-mechanism-unusable-in-practice).
