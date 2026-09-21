@@ -14,6 +14,9 @@ of this repository most likely to be useful to someone else.
 > **Status: work in progress.** This is a downstream port on a vendor 4.19
 > kernel. It is not upstream-ready and is not a daily driver.
 
+The device page on the official wiki is
+**[Xiaomi POCO M4 5G / Redmi 10 5G (xiaomi-thunder)](https://wiki.postmarketos.org/wiki/Xiaomi_POCO_M4_5G_/_Redmi_10_5G_(xiaomi-thunder))**.
+
 ## What works
 
 | Component | State | Notes |
@@ -85,7 +88,7 @@ device-scripts/                  what runs on the device itself
 docs/                            build, flash, Wi-Fi bring-up, vendor firmware
 docs/diario-pt/                  the raw debugging journal, in Portuguese
 tools/                           artifact verification before flashing
-wiki/                            draft page for the postmarketOS wiki
+wiki/                            source of the published postmarketOS wiki page
 ```
 
 `docs/diario-pt/` is kept in the language it was written in. It is a working
@@ -103,6 +106,35 @@ answer is probably in there.
 4. [docs/building.md#installing-the-device-scripts](docs/building.md#installing-the-device-scripts)
    — the packages do not install `device-scripts/`, and without them the device
    boots to a bare console with no compositor and no Wi-Fi
+
+## The postmarketOS wiki page
+
+This port has a page on the official wiki:
+**[Xiaomi POCO M4 5G / Redmi 10 5G (xiaomi-thunder)](https://wiki.postmarketos.org/wiki/Xiaomi_POCO_M4_5G_/_Redmi_10_5G_(xiaomi-thunder))**
+
+`wiki/xiaomi-thunder.mediawiki` in this repository is the source of that page.
+It covers the four kernel patches the port needs, the `deviceinfo` parameters
+(including the 4096-byte sector geometry), flashing on an A/B device with
+verified boot disabled, and the open issues.
+
+**Keep the two in sync in this direction: edit the file here, then paste it
+into the wiki.** If you edit the wiki directly, copy the result back into this
+file, or the next paste from here silently reverts your change.
+
+Two things the wiki's `Template:Infobox device` will bite you with, both of
+which cost time on the first upload:
+
+- `booting = yes` is required, or the template **hides the entire feature
+  table** — the page renders with hardware specs only and nothing about what
+  works.
+- Unknown parameter names fail silently. It is `status_screen` (not
+  `status_display`), `status_touch` (not `status_touchscreen`) and
+  `releaseyear` (not `released`). A wrong name renders as nothing, with no
+  warning.
+
+Feature values are `Y` / `P` / `N` / `-` (not applicable) or blank (untested).
+Since this port is not in pmaports, the page sets `packaged = no` and leaves
+`category` empty.
 
 ## Licensing
 
