@@ -10,10 +10,10 @@
 maintainer=""
 pkgname=linux-xiaomi-thunder
 pkgver=4.19.191
-pkgrel=21
+pkgrel=22
 _commit=a40ceab8943703f33e935cb0b86d0f69aa2044dd
 # Drop do driver de conectividade MediaTek enxertado em prepare().
-_conndrop=mtk-connectivity-gen4m-mt6833-1
+_conndrop=mtk-connectivity-gen4m-mt6833-2
 pkgdesc="Xiaomi POCO M4 5G kernel fork"
 arch="aarch64"
 url="https://github.com/MiCode/Xiaomi_Kernel_OpenSource/tree/light-u-oss"
@@ -69,7 +69,7 @@ prepare() {
 	# ---------------------------------------------------------------
 	# Enxerto do driver de conectividade MediaTek (gen4m, drop MT6833)
 	#
-	# Por que tarball e nao patch: sao ~23 MB / 763 arquivos de codigo
+	# Por que tarball e nao patch: sao ~23 MB / 657 arquivos de codigo
 	# de terceiro, sem historico comum com o tarball do kernel. Um
 	# patch desse tamanho e ilegivel, quebra em qualquer refresh e
 	# multiplica o tempo de "abuild unpack". Como tarball proprio o
@@ -86,7 +86,11 @@ prepare() {
 	local _drop="$srcdir/$_conndrop"
 	local _d
 
-	for _d in wmt_drv wmt_chrdev_wifi wlan_drv_gen4m connfem; do
+	# bt_drv: driver de caractere do Bluetooth (/dev/stpbt), acrescentado
+	# ao drop no -2. Vem da variante "wmt" do upstream -- a que fala com o
+	# chip pela STP do wmt_drv, e nao as variantes btif/connac2, que
+	# pressupoem conninfra (geracao CONNAC2, MT6893 em diante).
+	for _d in wmt_drv wmt_chrdev_wifi wlan_drv_gen4m connfem bt_drv; do
 		msg "connectivity: instalando $_d"
 		rm -rf "$_conn/$_d"
 		cp -a "$_drop/$_d" "$_conn/$_d"
@@ -172,10 +176,10 @@ package() {
 
 sha512sums="
 d0aa0cd26632a4ce272eea248c3db0003ba61c525814bc1d7aa83f14860f55a7b7e6cb15153154be6319936bcb4171aaed3de913e09d577623a1c5c55893a1df  linux-xiaomi-thunder-a40ceab8943703f33e935cb0b86d0f69aa2044dd.tar.gz
-75342a22fe7fb3d37a9593d5ee27393db66ce28797d6336370a2c7655bd6bf5721bf1dcb25c9c3d1be74505b849f47280cadcbf3340d1ee17ae3fa2c938d599a  mtk-connectivity-gen4m-mt6833-1.tar.gz
-71cb9531e1848f8bdd48a45db6747c200f1038b83b236c8f4eeec57d8672ae8097fbcc8af2a4c680e1aca470c6b4402d51a9da5f9a4b6cda359105ff8c4d25e8  connectivity-Makefile-mt6833
+309573289b492dbb14d209e9d876f01ca37e3bffafb8fc84f614b7c6eb06d96d7927ec795683d0e22b84ee94ffa7cada131f7033e741d0a901fd1beed5cbe136  mtk-connectivity-gen4m-mt6833-2.tar.gz
+639960eb8d666a8f44f33ffcd31e64c5041d09b25baf1fdcd89bcfb9216e411afab61cca57c3b23c73489f4c9de04090c4d0e52df4779556678646e21833be61  connectivity-Makefile-mt6833
 a9b7da2da3007ed64c4b585d9215193579a66854f02970d2d5ad4e2ae678c5111693730b4e7037ba1ca3454a9c4fcfb9eabddb36f3363ca865a0c700c9c80020  gen4m-mt6833-kernel419.diff
-157c3026d67347f4259b765a6a68042d2ab218e207e30055f23aa8ec268e2f5559aca24fa23d4b1d645c5f9365641c6b5ba14fb7558b28a91ff30db658a6c3c8  config-xiaomi-thunder.aarch64
+c57df32a2d5b8448635e0a17337ae34327b0f99201baeecc0465e373cce47391ca492dc0871eda8a6051bee2178b0927bf0672298b26e93b12448b50c827b8c1  config-xiaomi-thunder.aarch64
 db8cf819ef60acd0504e61307749cea436babdc3e9a5be178cedfb783bc99b92ed6b313b1a3b493b0e7ec552828e8686dedda7ee9c89142c92bbc243a8e6b38a  fix-selinux-host-includes.patch
 7154b51c23209acb1cd41e07490bd3d223598c6cad2878c9863b0c364f30d89bfa98662348329eaeeaf1116861489cbf261e1c84df70f320f101188db94b052e  fix-external-inline-declarations.patch
 d1ae3b4188dbc0521e343135fc60f695b55272db3d2f317978f0d34ce17740c3854341edc984cdddfbbd6bc477397f9890624b5fa34c1df6971b0ba436840c65  use-system-cpio.patch

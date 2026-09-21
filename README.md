@@ -4,12 +4,14 @@ A downstream postmarketOS port for the MediaTek **MT6833** (Dimensity 700)
 handset that Xiaomi ships as **Redmi 10 5G** in some markets and **POCO M4 5G**
 in others. Both share the codename `thunder` (also seen as `light`).
 
-The headline result of this port: **the Wi-Fi works**, on a SoC whose
-connectivity subsystem has no mainline support at all. Getting there took
-reconstructing MediaTek's `gen4m` connectivity stack for this SoC and writing a
-minimal replacement for the Android userspace daemon that drives it. That work
-is written up in [docs/wifi-bringup.md](docs/wifi-bringup.md) — it is the part
-of this repository most likely to be useful to someone else.
+The headline result of this port: **Wi-Fi and Bluetooth both work**, on a SoC
+whose connectivity subsystem has no mainline support at all. Getting there took
+reconstructing MediaTek's `gen4m` connectivity stack for this SoC, writing a
+minimal replacement for the Android userspace daemon that drives it, and then
+bridging a driver that only speaks to Android's stack into BlueZ. Those two
+write-ups — [docs/wifi-bringup.md](docs/wifi-bringup.md) and
+[docs/bluetooth-bringup.md](docs/bluetooth-bringup.md) — are the part of this
+repository most likely to be useful to someone else.
 
 > **Status: work in progress.** This is a downstream port on a vendor 4.19
 > kernel. It is not upstream-ready and is not a daily driver.
@@ -27,7 +29,7 @@ The device page on the official wiki is
 | Audio (speaker) | works | headphone path written but untested |
 | USB networking | works | RNDIS, the usual pmOS `172.16.42.1` |
 | Charging | works | the battery charges; the **fuel gauge does not** report a level |
-| Bluetooth | **does not work** | same chip as Wi-Fi, and its ROM patch *is* loaded into EMI — but no adapter appears under `/sys/class/bluetooth/`. The radio is up; the host-side HCI stack is missing |
+| Bluetooth | **works** | brought up at boot by an OpenRC service. Scanning and pairing verified against a Linux host, BR/EDR and LE, coexisting with Wi-Fi. Factory address read from `nvdata` at run time. **Audio does not play** — A2DP negotiates and the link carries the stream, but the device has no audio session to consume it; see [bluetooth-bringup.md](docs/bluetooth-bringup.md#audio-negotiates-but-nothing-plays) |
 | Modem | not started | |
 | Cameras | not started | |
 
@@ -85,7 +87,7 @@ from public vendor trees.
 pmaports/linux-xiaomi-thunder/   kernel package: APKBUILD, config, patches
 pmaports/device-xiaomi-thunder/  device package (minus the firmware blobs)
 device-scripts/                  what runs on the device itself
-docs/                            build, flash, Wi-Fi bring-up, vendor firmware
+docs/                            build, flash, Wi-Fi and Bluetooth bring-up, vendor firmware
 docs/diario-pt/                  the raw debugging journal, in Portuguese
 tools/                           artifact verification before flashing
 wiki/                            source of the published postmarketOS wiki page

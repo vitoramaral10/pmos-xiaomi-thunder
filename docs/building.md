@@ -58,15 +58,18 @@ Without them the device boots to a console with no compositor and no Wi-Fi.
 ```sh
 # on the device
 install -m755 sobe-wifi.sh wifi-nvram-push.py wmt-daemon.py wmt-loader.py \
-              weston-thunder-launch sobe-weston le-reg.py /usr/local/bin/
+              weston-thunder-launch sobe-weston le-reg.py \
+              stpbt-vhci-bridge.py reinicia-no-fastboot.py /usr/local/bin/
 install -m644 weston-thunder.ini /etc/
 install -m755 init.d/weston-thunder      /etc/init.d/
 install -m755 init.d/touchscreen-thunder-wake /etc/init.d/
 install -m755 init.d/wifi-thunder        /etc/init.d/
+install -m755 init.d/bluetooth-thunder   /etc/init.d/
 
 rc-update add touchscreen-thunder-wake default
 rc-update add weston-thunder            default
 rc-update add wifi-thunder              default
+rc-update add bluetooth-thunder         default
 ```
 
 The connectivity firmware also has to be in `/lib/firmware/` — see
@@ -79,9 +82,12 @@ What each service does:
 | `touchscreen-thunder-wake` | unblanks the framebuffer, without which the touch controller never raises its interrupt |
 | `weston-thunder` | starts the compositor with the pixman software renderer |
 | `wifi-thunder` | runs the whole CONNSYS power-on before NetworkManager |
+| `bluetooth-thunder` | loads `bt_drv_6833`, extracts the factory BD address from `nvdata`, and runs the `/dev/stpbt` ↔ `/dev/vhci` bridge before `bluetoothd` |
 
 `le-reg.py` is a debugging tool (reads physical registers through `/dev/mem`),
-not needed at runtime.
+not needed at runtime. `reinicia-no-fastboot.py` is a host-side convenience:
+it reboots the device straight into fastboot without touching the buttons —
+see [flashing.md](flashing.md#rebooting-into-fastboot-later-without-touching-the-device).
 
 ## Verifying before flashing
 
@@ -119,6 +125,18 @@ cp "$K" /root/wmt_drv.ko.bak
 wget -O /tmp/wmt_drv.new http://172.16.42.2:8103/wmt_drv.ko
 cp /tmp/wmt_drv.new "$K" && depmod -a
 ```
+
+> **A trap that comes with installing kernels by hand.** Flashing a `boot.img`
+> and copying `.ko` files does not tell `apk` anything: its database still
+> records whatever kernel version was last installed as a package. Any later
+> `apk add` — of any package — can trigger `mkinitfs` and `boot-deploy`, which
+> regenerate `/boot/boot.img` **from that recorded version**. On this device
+> `/boot` is a loop-mounted filesystem inside the rootfs image while the
+> bootloader reads the `boot_a` partition, so nothing breaks immediately; but
+> whoever flashes that regenerated image later silently loses every fix in the
+> hand-installed kernel. If you keep a hand-installed kernel around, install
+> its `.apk` into the rootfs too so `apk`, `/boot` and the flashed partition
+> tell the same story.
 
 Then reboot — `wmt_drv` cannot be unloaded cleanly (see
 [wifi-bringup.md](wifi-bringup.md)), and the ROM patch registration is

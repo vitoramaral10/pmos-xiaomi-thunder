@@ -399,12 +399,10 @@ without it.
 
 Bluetooth is on the **same chip**, and its ROM patch
 (`soc2_2_ram_bt_1_1_hdr.bin`, type 0) is already downloaded into EMI at offset
-`0x170000` as part of this sequence. Despite that, no adapter appears under
-`/sys/class/bluetooth/` and the `bluetooth` service stays stopped.
+`0x170000` as part of this sequence — so the expensive half was already paid
+for here.
 
-So the radio side is up and the host-side HCI stack is what is missing. That
-makes it the natural next target: the expensive part — powering CONNSYS on —
-is already done.
+It now works. See [bluetooth-bringup.md](bluetooth-bringup.md).
 
 ## Debugging notes worth keeping
 
