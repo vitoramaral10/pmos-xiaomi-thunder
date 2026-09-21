@@ -563,3 +563,28 @@ CONFIG_USER_NS=y
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 CONFIG_DRM_FBDEV_EMULATION=y
+
+# pmOS r22: Bluetooth.
+#
+# O light_defconfig da Xiaomi deixa CONFIG_BT e CONFIG_RFKILL em 'n' porque o
+# Android nao usa o BlueZ: a pilha dele e toda em espaco de usuario e fala
+# direto com /dev/stpbt. Aqui e o contrario -- o BlueZ do postmarketOS PRECISA
+# do subsistema no kernel. Sem estas linhas nem /sys/class/bluetooth existe.
+#
+# CONFIG_BT_HCIVHCI e o transporte: o driver do chip (bt_drv_6833.ko) so
+# entrega um chardev, nao um hci_dev, entao um daemon em espaco de usuario faz
+# a ponte /dev/stpbt <-> /dev/vhci. Ver device-scripts/stpbt-vhci-bridge.py.
+#
+# As dependencias de crypto (CMAC, ECDH, SHA256, ECB) sao 'select' do
+# CONFIG_BT no Kconfig e o olddefconfig as resolve sozinho.
+CONFIG_RFKILL=y
+CONFIG_BT=y
+CONFIG_BT_BREDR=y
+CONFIG_BT_LE=y
+CONFIG_BT_RFCOMM=y
+CONFIG_BT_RFCOMM_TTY=y
+CONFIG_BT_BNEP=y
+CONFIG_BT_BNEP_MC_FILTER=y
+CONFIG_BT_BNEP_PROTO_FILTER=y
+CONFIG_BT_HIDP=y
+CONFIG_BT_HCIVHCI=y
