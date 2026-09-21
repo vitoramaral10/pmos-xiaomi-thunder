@@ -116,11 +116,33 @@ That restores the factory boot chain. It does **not** restore your data —
 
 ## Rebooting into fastboot later, without touching the device
 
-`reboot bootloader` works: the kernel's `rtc_mark_fast()`
-(`drivers/misc/mediatek/rtc/mtk_rtc_common.c`) sets `RTC_FAST_BOOT = 0x1` in an
-RTC spare register, which the preloader reads.
+Use `device-scripts/reinicia-no-fastboot.py`. Measured: **8 seconds** from the
+command to the device enumerating as `18d1:d00d`, interface class `ff/42/03`,
+with `fastboot getvar product` answering `thunder`.
 
-`echo b > /proc/sysrq-trigger` does **not** — it is an immediate reset that
-skips the reboot-notifier phase where that marker is written, so the device
-comes back into pmOS. Useful to know when a wedged module blocks a clean
-shutdown and sysrq is your only way to reboot.
+`reboot bootloader` does **not** work here, and an earlier version of this
+document claimed it did. The bootloader was never the problem: `/bin/reboot` on
+postmarketOS is a symlink to busybox, and **busybox ignores the argument
+entirely** — it always calls `reboot(RB_AUTOBOOT)`. The word `bootloader` is
+dropped silently, with no error and no warning, and the device reboots straight
+back into pmOS.
+
+The kernel has both hooks, confirmed in `/proc/kallsyms`: `rtc_mark_fast()`
+(`drivers/misc/mediatek/rtc/mtk_rtc_common.c`) sets `RTC_FAST_BOOT = 0x1` in an
+RTC spare register for the preloader to read, and `do_kernel_restart()` passes
+the command string to the restart handlers. All that was missing was someone
+passing the string — which needs the four-argument form of the `reboot()`
+syscall, with `LINUX_REBOOT_CMD_RESTART2` and a pointer to the text. No libc
+wrapper exposes that form (`reboot()` in both musl and glibc takes a single
+argument), hence the raw syscall in the script.
+
+`echo b > /proc/sysrq-trigger` cannot work either, for a different reason:
+sysrq calls `emergency_restart()`, which skips the restart handlers and so
+skips `rtc_mark_fast()`. It reboots, always into pmOS. Useful to know when a
+wedged module blocks a clean shutdown and sysrq is your only way out.
+
+One trap worth repeating: in normal operation the device enumerates as
+`18d1:d001`, and `usb.ids` labels that pair "Nexus 4 (fastboot)". The label is
+a lie — the pmOS RNDIS gadget reuses that ID. What tells the two apart is the
+interface class: `e0/01/03` with `rndis_host` for the gadget, `ff/42/03` for
+real fastboot.
