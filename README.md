@@ -20,16 +20,17 @@ of this repository most likely to be useful to someone else.
 |---|---|---|
 | Display | works | software rendering only (pixman), no GPU acceleration |
 | Touchscreen | works | needs the proprietary Novatek NT36672C firmware, see below |
-| Wi-Fi | **works** | 2.4 GHz and 5 GHz, scan + WPA2 association + DHCP. The factory MAC and RF calibration are available but off by default — see [wifi-bringup.md](docs/wifi-bringup.md#the-factory-mac-solved-mechanism-unusable-in-practice) |
+| Wi-Fi | **works** | brought up at boot by an OpenRC service. 2.4/5 GHz, WPA2 and WPA3, ~133 Mbit/s measured over LAN. The factory MAC and RF calibration are available but off by default — see [wifi-bringup.md](docs/wifi-bringup.md#the-factory-mac-solved-mechanism-unusable-in-practice) |
 | Audio (speaker) | works | headphone path written but untested |
 | USB networking | works | RNDIS, the usual pmOS `172.16.42.1` |
 | Charging | works | the battery charges; the **fuel gauge does not** report a level |
-| Bluetooth | untested | the BT ROM patch loads, nothing beyond that was tried |
+| Bluetooth | **does not work** | same chip as Wi-Fi, and its ROM patch *is* loaded into EMI — but no adapter appears under `/sys/class/bluetooth/`. The radio is up; the host-side HCI stack is missing |
 | Modem | not started | |
 | Cameras | not started | |
 
 `weston` is started at boot by an OpenRC service, so the device comes up to a
-graphical session.
+graphical session, and `wifi-thunder` brings the radio up before
+NetworkManager, so it associates on its own.
 
 ## Security note: read before installing this
 

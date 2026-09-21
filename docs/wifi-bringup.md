@@ -348,6 +348,64 @@ one, the extra power cycle disappears and so does the association failure.
 Instrumenting `glLoadNvram()` with a plain `printk` is the obvious next step,
 since the driver's own logging is unavailable.
 
+## Bringing it up at boot
+
+The bring-up is not something the kernel does on its own — the CONNSYS
+subsystem has no firmware of its own and the whole sequence in this document
+has to run on every boot. `device-scripts/init.d/wifi-thunder` is the OpenRC
+service that does it:
+
+```sh
+rc-update add wifi-thunder default
+```
+
+Two details that are not obvious:
+
+- It runs **`before networkmanager`**, so NM finds the interface already
+  present instead of racing the driver.
+- Success is judged by **`/sys/class/net/wlan0` existing**, not by the script's
+  exit code. `sobe-wifi.sh` has expected failures along the way — the second
+  `SET_PATCH_NUM` ioctl legitimately returns EPERM, for instance — so the exit
+  code would give false negatives.
+
+## Measured performance
+
+| path | result |
+|---|---|
+| internet download, 50 MB from a public server | 20 Mbit/s |
+| **LAN, host → device, 50 MB** | **133 Mbit/s** |
+
+The 20 Mbit/s figure is the internet link, not the radio. Worth stating because
+it is an easy wrong conclusion to reach: **measure over the LAN before blaming
+the radio for low throughput.** The LAN number is itself conservative, since
+that path also crosses the host's own Wi-Fi.
+
+Negotiated link rate is 1170 Mbit/s on 5 GHz. The driver advertises WPA3
+alongside WPA2, and reports AP mode as supported (`ap0` and `p2p0` are
+created), though AP mode has not been tested.
+
+## Regulatory domain
+
+`/proc/net/wlan/country` reads `12336`, which is ASCII `"00"` — the world
+domain. The measured effect: visible 2.4 GHz channels stop at 2462 MHz
+(channel 11), while some regions allow 12 and 13. 5 GHz shows 5180–5805
+including DFS channels. Writing to that proc file is accepted but does not
+change the value.
+
+This is **not** caused by the NVRAM push — the value is identical with and
+without it.
+
+## Bluetooth
+
+Bluetooth is on the **same chip**, and its ROM patch
+(`soc2_2_ram_bt_1_1_hdr.bin`, type 0) is already downloaded into EMI at offset
+`0x170000` as part of this sequence. Despite that, no adapter appears under
+`/sys/class/bluetooth/` and the `bluetooth` service stays stopped.
+
+So the radio side is up and the host-side HCI stack is what is missing. That
+makes it the natural next target: the expensive part — powering CONNSYS on —
+is already done.
+
 ## Debugging notes worth keeping
 
 - **The dmesg ring buffer rolls in seconds** on this device, flooded by
