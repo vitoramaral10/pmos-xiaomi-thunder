@@ -1,0 +1,30 @@
+--- a/drivers/gpu/drm/mediatek/mtk_drm_gem.c
++++ b/drivers/gpu/drm/mediatek/mtk_drm_gem.c
+@@ -409,8 +409,27 @@
+ 		   name,
+ 		   line);
+ 	DRM_MMP_EVENT_START(ion_import_dma, (unsigned long)client, line);
++
++	/* Without an Android ION client (e.g. under a non-Android userspace)
++	 * there is nothing to import from. Bail out instead of handing NULL
++	 * to ion_import_dma_buf().
++	 */
++	if (!client) {
++		DRM_MMP_EVENT_END(ion_import_dma, 0, (unsigned long)dmabuf);
++		return ERR_PTR(-ENODEV);
++	}
++
+ 	handle = ion_import_dma_buf(client, dmabuf);
+ 
++	/* ion_import_dma_buf() returns an ERR_PTR on failure; dereferencing
++	 * handle->buffer before checking it panics the kernel. The caller
++	 * only tests IS_ERR(), so normalise NULL into an error pointer too.
++	 */
++	if (IS_ERR_OR_NULL(handle)) {
++		DRM_MMP_EVENT_END(ion_import_dma, 0, (unsigned long)dmabuf);
++		return IS_ERR(handle) ? handle : ERR_PTR(-EINVAL);
++	}
++
+ 	DRM_MMP_EVENT_END(ion_import_dma, (unsigned long)handle->buffer,
+ 			(unsigned long)dmabuf);
+ 	DDPDBG("%s:%d handle:0x%p -\n",

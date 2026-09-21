@@ -1,0 +1,13 @@
+--- a/drivers/misc/hqsysfs/hqsys_pcba.c
++++ b/drivers/misc/hqsysfs/hqsys_pcba.c
+@@ -76 +76 @@ static bool read_pcba_config_light(void)
+-	int ret = 0, auxadc_voltage = 0, board_vol = 0;
++	int ret = 0, auxadc_voltage = 0, board_vol = 0, i;
+@@ -119 +119 @@ static bool read_pcba_config_light(void)
+-	for (int i = 0; i < sizeof(stage_map)/sizeof(struct project_stage); i++) {
++	for (i = 0; i < sizeof(stage_map)/sizeof(struct project_stage); i++) {
+--- a/sound/soc/codecs/sia81xx/sia8152_regs.c
++++ b/sound/soc/codecs/sia81xx/sia8152_regs.c
+@@ -297 +297 @@ static void sia8152_check_trimming(
+-	uint8_t vals[reg_num] = {0};
++	uint8_t vals[ARRAY_SIZE(trimming_regs)] = {0};

@@ -1,0 +1,5 @@
+--- a/kernel/gen_kheaders.sh
++++ b/kernel/gen_kheaders.sh
+@@ -11 +11 @@
+-cpio=$KBUILD_SRC/tools/build/cpio
++cpio=${CPIO:-cpio}

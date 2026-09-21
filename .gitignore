@@ -1,0 +1,19 @@
+# Proprietary firmware — never commit these
+*.bin
+*.img
+*.ko
+*.so
+nt36672c_*
+soc2_2_ram_*
+WIFI_RAM_CODE_*
+
+# Build output
+work/
+packages/
+*.apk
+*.log
+
+# Editor / OS noise
+__pycache__/
+*.pyc
+.DS_Store

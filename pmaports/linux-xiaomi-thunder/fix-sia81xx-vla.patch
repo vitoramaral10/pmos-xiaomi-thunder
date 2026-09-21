@@ -1,0 +1,14 @@
+--- a/sound/soc/codecs/sia81xx/sia8152s_regs.c
++++ b/sound/soc/codecs/sia81xx/sia8152s_regs.c
+@@ -290 +290 @@ void sia8152s_check_trimming(
+-	uint8_t vals[reg_num] = {0};
++	uint8_t vals[ARRAY_SIZE(trimming_regs)] = {0};
+--- a/sound/soc/codecs/sia81xx/sia8159_regs.c
++++ b/sound/soc/codecs/sia81xx/sia8159_regs.c
+@@ -286,2 +286,4 @@ static void sia8159_check_trimming(
+-	static const char defaults[reg_num] = {0x76, 0x66, 0x70};
+-	uint8_t vals[reg_num] = {0};
++	static const char defaults[
++		SIA8159_REG_TRIMMING_END - SIA8159_REG_TRIMMING_BEGIN + 1] =
++		{0x76, 0x66, 0x70};
++	uint8_t vals[SIA8159_REG_TRIMMING_END - SIA8159_REG_TRIMMING_BEGIN + 1] = {0};

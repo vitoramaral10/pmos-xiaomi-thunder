@@ -1,0 +1,48 @@
+#!/bin/sh
+# Ajustes de sistema para o port xiaomi-thunder.
+# Roda tanto em instalacao nova (.post-install) quanto em atualizacao
+# (.post-upgrade) — o apk usa scripts diferentes para cada caso.
+
+# 1) Desliga os gettys dos terminais virtuais.
+#    O kernel tem CONFIG_VT=y mas nao tem CONFIG_FRAMEBUFFER_CONSOLE, entao os
+#    terminais virtuais nao sao desenhados em lugar nenhum e os gettys so
+#    gastam CPU. Ligar o fbcon foi tentado no kernel r13 e quebrou o boot:
+#    panic aos 1,3s, antes do initramfs.
+sed -i '/^tty[1-6]::respawn:/s/^/#/' /etc/inittab
+
+# 2) Corrige a alocacao de pseudo-terminais, a cada boot.
+#    Este kernel tem multiplas instancias de devpts. O /dev/ptmx criado pelo
+#    devtmpfs e um no de dispositivo solto (5:2), entao abri-lo aloca o
+#    terminal na instancia INICIAL, enquanto /dev/pts e uma instancia montada
+#    a parte — mestre e escravo caem em universos diferentes e nao se falam.
+#    Apontar /dev/ptmx para o ptmx da instancia montada e a correcao padrao.
+#    Precisa rodar a cada boot porque /dev e devtmpfs e o no e recriado.
+#    Sintoma sem isto: "PTY allocation request failed on channel 0".
+install -m 755 /dev/null /etc/local.d/98-fix-ptmx.start
+printf '%s\n' '#!/bin/sh' 'ln -sf pts/ptmx /dev/ptmx' 'chmod 666 /dev/pts/ptmx' \
+	> /etc/local.d/98-fix-ptmx.start
+chmod 755 /etc/local.d/98-fix-ptmx.start
+
+# 3) Shell de depuracao na porta 23, SEM AUTENTICACAO.
+#    TEMPORARIO. Existe porque sessoes SSH nao funcionam neste port: o dropbear
+#    autentica, cria o shell, e nenhum dado flui em nenhuma direcao, com ou sem
+#    pty. Vale so no enlace USB ponto a ponto (172.16.42.0/24), que nao e
+#    roteado. REMOVER assim que o SSH funcionar.
+install -m 755 /dev/null /etc/local.d/99-shell-debug.start
+printf '%s\n' '#!/bin/sh' \
+	'[ -x /usr/sbin/telnetd ] && /usr/sbin/telnetd -l /bin/sh -p 23' \
+	> /etc/local.d/99-shell-debug.start
+chmod 755 /etc/local.d/99-shell-debug.start
+
+# 4) Liga o servico que acorda o touchscreen Novatek NT36672C.
+#    O driver NVT-ts termina o probe com bTouchIsAwake = 0 e so acorda em
+#    nvt_ts_resume(), disparado por FB_BLANK_UNBLANK — evento que nada emite
+#    neste port, porque CONFIG_FRAMEBUFFER_CONSOLE nao esta setado. O servico
+#    escreve 0 em /sys/class/graphics/fb0/blank a cada boot, independente do
+#    compositor. O firmware em si vem no subpacote
+#    device-xiaomi-thunder-nonfree-firmware.
+if command -v rc-update >/dev/null 2>&1; then
+	rc-update add touchscreen-thunder-wake default || true
+fi
+
+exit 0

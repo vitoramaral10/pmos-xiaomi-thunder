@@ -1,0 +1,187 @@
+# Reference: <https://postmarketos.org/vendorkernel>
+# Kernel config based on: arch/arm64/configs/light_defconfig
+#
+# ATENCAO -- NAO PUBLICAR ESTE APORT EM REPOSITORIO PUBLICO.
+# A entrada de source "mtk-connectivity-gen4m-mt6833-1.tar.gz" contem codigo
+# de conectividade da MediaTek (wmt_drv / wmt_chrdev_wifi / wlan_drv_gen4m /
+# connfem) redistribuido de um drop de kernel de terceiro. Nao ha licenca que
+# autorize redistribuicao publica. Mesma restricao ja aplicada ao firmware do
+# touchscreen: uso local apenas.
+maintainer=""
+pkgname=linux-xiaomi-thunder
+pkgver=4.19.191
+pkgrel=21
+_commit=a40ceab8943703f33e935cb0b86d0f69aa2044dd
+# Drop do driver de conectividade MediaTek enxertado em prepare().
+_conndrop=mtk-connectivity-gen4m-mt6833-1
+pkgdesc="Xiaomi POCO M4 5G kernel fork"
+arch="aarch64"
+url="https://github.com/MiCode/Xiaomi_Kernel_OpenSource/tree/light-u-oss"
+license="GPL-2.0-only"
+makedepends="
+	bash
+	bc
+	bison
+	cpio
+	devicepkg-dev
+	findutils
+	flex
+	kmod
+	openssl-dev
+	perl
+	xz
+	"
+source="
+	$pkgname-$_commit.tar.gz::https://github.com/MiCode/Xiaomi_Kernel_OpenSource/archive/$_commit.tar.gz
+	$_conndrop.tar.gz
+	connectivity-Makefile-mt6833
+	gen4m-mt6833-kernel419.diff
+	config-${pkgname#linux-}.$arch
+	fix-selinux-host-includes.patch
+	fix-external-inline-declarations.patch
+	use-system-cpio.patch
+	fix-gcc-modern-compat.patch
+	fix-sia81xx-vla.patch
+	build-mt6833-dtb.patch
+	fix-u-serial-null-close.patch
+	fix-mtk-gem-ion-null.patch
+	"
+builddir="$srcdir/Xiaomi_Kernel_OpenSource-$_commit"
+options="
+	!check
+	!strip
+	!tracedeps
+	pmb:cross-native
+	"
+_outdir="out"
+
+_carch="arm64"
+
+# Used internally by pmbootstrap. Don't touch.
+# TODO: Remove once minimum default pmbootstrap version supports
+# kernel packages without '_flavor' and '_config'.
+_config="config-${pkgname#linux-}.$arch"
+_flavor="${pkgname#linux-}"
+
+prepare() {
+	default_prepare
+
+	# ---------------------------------------------------------------
+	# Enxerto do driver de conectividade MediaTek (gen4m, drop MT6833)
+	#
+	# Por que tarball e nao patch: sao ~23 MB / 763 arquivos de codigo
+	# de terceiro, sem historico comum com o tarball do kernel. Um
+	# patch desse tamanho e ilegivel, quebra em qualquer refresh e
+	# multiplica o tempo de "abuild unpack". Como tarball proprio o
+	# conteudo fica intacto, verificavel por sha512 e trivial de
+	# substituir por outro drop.
+	#
+	# Roda ANTES de downstreamkernel_prepare de proposito: aquele
+	# script varre o builddir inteiro removendo -Werror de todo
+	# Makefile / Makefile.common / Kbuild, e a arvore enxertada precisa
+	# passar por essa varredura (e drop de kernel 4.14 compilando em
+	# 4.19; vai gerar warning).
+	# ---------------------------------------------------------------
+	local _conn="$builddir/drivers/misc/mediatek/connectivity"
+	local _drop="$srcdir/$_conndrop"
+	local _d
+
+	for _d in wmt_drv wmt_chrdev_wifi wlan_drv_gen4m connfem; do
+		msg "connectivity: instalando $_d"
+		rm -rf "$_conn/$_d"
+		cp -a "$_drop/$_d" "$_conn/$_d"
+	done
+
+	# connectivity/common/ -- OBRIGATORIO.
+	# O struct wmt_platform_bridge tem layout diferente entre geracoes:
+	# o do tarball light-u-oss tem "debug_write_cb; debug_read_cb;" e o
+	# do drop tem "debug_cb;" mais conninfra_reg_is_bus_hang_no_lock_cb.
+	# Sem esta troca a bridge le e escreve campos trocados, sem erro de
+	# compilacao nem de link -- falha silenciosa em runtime.
+	# Os arquivos vem do proprio wmt_drv/ do drop: sao, por construcao,
+	# a mesma versao que wmt_drv.ko espera.
+	# Conferido: nenhum outro arquivo do kernel alvo inclui
+	# wmt_build_in_adapter.h ou connectivity_build_in_adapter.h, entao a
+	# troca nao respinga fora de connectivity/.
+	msg "connectivity: substituindo common/ (wmt_platform_bridge)"
+	cp -f "$_drop/wmt_drv/connectivity_build_in_adapter.c" \
+		"$_drop/wmt_drv/connectivity_build_in_adapter.h" \
+		"$_drop/wmt_drv/wmt_build_in_adapter.c" \
+		"$_drop/wmt_drv/wmt_build_in_adapter.h" \
+		"$_conn/common/"
+
+	# Makefile do connectivity: o do tarball hardcoda
+	# MTK_COMBO_CHIP=CONNAC e WLAN_CHIP_ID=6765 (errado para MT6833).
+	msg "connectivity: instalando Makefile MT6833"
+	cp -f "$srcdir/connectivity-Makefile-mt6833" "$_conn/Makefile"
+
+	# Correcoes de compilacao do drop em kernel 4.19. Aplicado AQUI, e nao
+	# via default_prepare, porque aquele roda antes da copia acima e seria
+	# sobrescrito. Conteudo: (a) plat_priv.c do mt6833 nao pode incluir
+	# <linux/pm_qos.h> no ramo 4.19, senao os #define pm_qos_*->mtk_pm_qos_*
+	# colidem com mtk-pm-qos.h; e precisa de cpu_ctrl.h e topo_ctrl.h, que o
+	# drop so incluia no ramo antigo. (b) LIST_SEG_MAX definido localmente em
+	# gl_qa_agent.h e (c) stub de wlanoidListMode em wlan_oid.c.
+	#
+	# (b) e (c) ficaram INERTES a partir de r17, quando o wlan_service passou
+	# a ser compilado (MTK_WLAN_SERVICE_PATH no connectivity-Makefile-mt6833,
+	# com a evidencia toda documentada la). Nao foram removidos de proposito:
+	# (b) e "#ifndef LIST_SEG_MAX" com o mesmo valor 100 de
+	# net_adaption.h:1215 -- redefinicao identica, que o C aceita sem
+	# diagnostico -- e (c) e "#if (CONFIG_WLAN_SERVICE != 1)", cujo ramo #else
+	# e o codigo original. Os dois voltam a valer sozinhos se algum dia o
+	# servico for desligado de novo.
+	msg "connectivity: aplicando correcoes de kernel 4.19"
+	patch -p1 -d "$_conn" < "$srcdir/gen4m-mt6833-kernel419.diff"
+
+	REPLACE_GCCH=0
+	. downstreamkernel_prepare
+}
+
+build() {
+	unset LDFLAGS
+	make O="$_outdir" ARCH="$_carch" CC="${CC:-gcc}" HOSTCC=gcc HOSTCXX=g++ \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))"-postmarketOS
+}
+
+package() {
+	# O bootloader MTK deste aparelho so aceita kernel comprimido: o boot.img
+	# de fabrica carrega Image.gz (magic 1f8b), nao Image cru. Sem isto o
+	# downstreamkernel_package escolhe "Image" e o aparelho entra em bootloop
+	# sem nunca executar o kernel.
+	export KERNEL_IMAGE_NAME="Image.gz"
+	downstreamkernel_package "$builddir" "$pkgdir" "$_carch" \
+		"${pkgname#linux-}" "$_outdir"
+	make dtbs_install O="$_outdir" ARCH="$_carch" \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
+
+	# downstreamkernel_package so instala kernel.release e boot/vmlinuz --
+	# nenhum modulo. Como o Wi-Fi sai como .ko, precisamos disto.
+	# INSTALL_MOD_STRIP=1 porque o config tem CONFIG_DEBUG_INFO=y e
+	# wlan_drv_gen4m.ko sem strip carrega dezenas de MB de DWARF; o
+	# options="!strip" acima so desliga o strip do proprio abuild, nao
+	# interfere aqui. modules_install ja roda depmod sozinho (dai o kmod
+	# em makedepends).
+	make modules_install O="$_outdir" ARCH="$_carch" \
+		INSTALL_MOD_PATH="$pkgdir" INSTALL_MOD_STRIP=1
+
+	# symlinks build/ e source/ apontam para o diretorio de build e ficam
+	# pendurados dentro do apk.
+	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
+}
+
+sha512sums="
+d0aa0cd26632a4ce272eea248c3db0003ba61c525814bc1d7aa83f14860f55a7b7e6cb15153154be6319936bcb4171aaed3de913e09d577623a1c5c55893a1df  linux-xiaomi-thunder-a40ceab8943703f33e935cb0b86d0f69aa2044dd.tar.gz
+75342a22fe7fb3d37a9593d5ee27393db66ce28797d6336370a2c7655bd6bf5721bf1dcb25c9c3d1be74505b849f47280cadcbf3340d1ee17ae3fa2c938d599a  mtk-connectivity-gen4m-mt6833-1.tar.gz
+71cb9531e1848f8bdd48a45db6747c200f1038b83b236c8f4eeec57d8672ae8097fbcc8af2a4c680e1aca470c6b4402d51a9da5f9a4b6cda359105ff8c4d25e8  connectivity-Makefile-mt6833
+a9b7da2da3007ed64c4b585d9215193579a66854f02970d2d5ad4e2ae678c5111693730b4e7037ba1ca3454a9c4fcfb9eabddb36f3363ca865a0c700c9c80020  gen4m-mt6833-kernel419.diff
+157c3026d67347f4259b765a6a68042d2ab218e207e30055f23aa8ec268e2f5559aca24fa23d4b1d645c5f9365641c6b5ba14fb7558b28a91ff30db658a6c3c8  config-xiaomi-thunder.aarch64
+db8cf819ef60acd0504e61307749cea436babdc3e9a5be178cedfb783bc99b92ed6b313b1a3b493b0e7ec552828e8686dedda7ee9c89142c92bbc243a8e6b38a  fix-selinux-host-includes.patch
+7154b51c23209acb1cd41e07490bd3d223598c6cad2878c9863b0c364f30d89bfa98662348329eaeeaf1116861489cbf261e1c84df70f320f101188db94b052e  fix-external-inline-declarations.patch
+d1ae3b4188dbc0521e343135fc60f695b55272db3d2f317978f0d34ce17740c3854341edc984cdddfbbd6bc477397f9890624b5fa34c1df6971b0ba436840c65  use-system-cpio.patch
+7bc8637be36304fcf134a89fcb68a702ad5c1df7d1e654eb9e90a297976cf968e6f633551a5688fec2de17b2ffeb29dbafc82d76c5714d736a52952f2884549d  fix-gcc-modern-compat.patch
+424d8b5392f875bb82ae03b143dec8bf4e442513affbbad4c4e6d43e6594fcd4aca96e6fd16a222af6f7a08a37d01d14b62fcb29e1f947ada49bc0ecc3ed8431  fix-sia81xx-vla.patch
+fa73e0a94c72f6aaaacc1bf59db5cc5462c75e70a51b517a88f4d035c42268aacae069e362cf8102899ea44eff06b1a42afbd2981a0515c2d6d99f216bcbe265  build-mt6833-dtb.patch
+bc6160fe11cc797d1e90bfe3de0b2f4b5e05c030dc9335d4ba77872a912bf59f6841f657069e7a1143ace787f1f47dddddf4eac490c94f08a09562b69538d83b  fix-u-serial-null-close.patch
+ac7416fd499bfe96702c5766018289ab710e68812d9e4c6e311a0015ac426f9f70b5dc4bf9693dc253e1477086ec0cda1209e26ec2687f521de8491fa9c7d5ce  fix-mtk-gem-ion-null.patch
+"

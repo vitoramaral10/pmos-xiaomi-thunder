@@ -1,0 +1,30 @@
+--- a/include/linux/keyslot-manager.h
++++ b/include/linux/keyslot-manager.h
+@@ -101 +101 @@
+-inline void ksm_flock(struct keyslot_manager *ksm, unsigned int flags);
++void ksm_flock(struct keyslot_manager *ksm, unsigned int flags);
+--- a/block/keyslot-manager.c
++++ b/block/keyslot-manager.c
+@@ -683 +683 @@
+-inline void ksm_flock(struct keyslot_manager *ksm, unsigned int flags)
++void ksm_flock(struct keyslot_manager *ksm, unsigned int flags)
+--- a/include/linux/blk-crypto.h
++++ b/include/linux/blk-crypto.h
+@@ -33 +33 @@
+-inline void blk_crypto_flock(struct keyslot_manager *ksm, unsigned int flags);
++void blk_crypto_flock(struct keyslot_manager *ksm, unsigned int flags);
+--- a/block/blk-crypto.c
++++ b/block/blk-crypto.c
+@@ -308 +308 @@
+-inline void blk_crypto_flock(struct keyslot_manager *ksm, unsigned int flags)
++void blk_crypto_flock(struct keyslot_manager *ksm, unsigned int flags)
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -2365 +2365 @@
+-inline void uclamp_se_set(struct uclamp_se *uc_se,
++void uclamp_se_set(struct uclamp_se *uc_se,
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -761 +761 @@
+-inline void uclamp_se_set(struct uclamp_se *uc_se,
++void uclamp_se_set(struct uclamp_se *uc_se,

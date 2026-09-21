@@ -1,0 +1,257 @@
+{{Infobox device
+| manufacturer = Xiaomi
+| name = POCO M4 5G
+| codename = xiaomi-thunder
+| released = 2022
+| category = testing
+| originalsoftware = Android 12
+| chipset = MediaTek MT6833 (Dimensity 700)
+| cpu = Octa-core (2x2.2 GHz Cortex-A76, 6x2.0 GHz Cortex-A55)
+| gpu = Mali-G57 MC2
+| storage = 64/128 GB UFS
+| memory = 4/6 GB
+| architecture = aarch64
+| status_usbnet = Y
+| status_flashing = Y
+| status_touchscreen = ?
+| status_display = P
+| status_wifi = ?
+| status_xwayland = N
+| status_fde = ?
+| status_mainline = N
+}}
+
+'''Work in progress.''' This is an unofficial downstream port. The device boots
+postmarketOS, mounts its root filesystem and brings up USB networking, but
+there is '''no usable graphical output''' and '''SSH sessions do not work'''
+(see [[#Known issues]]). Do not expect a daily driver.
+
+== Contributors ==
+* (add yourself)
+
+== Kernel ==
+Downstream kernel 4.19.191, from the vendor kernel source release for this
+device (branch <code>light-u-oss</code> of the official Xiaomi kernel source
+repository).
+
+Note the two marketing/engineering codenames: the device package uses
+<code>thunder</code>, while the kernel defconfig and device tree use
+<code>light</code>.
+
+=== Required patches ===
+Four fixes were needed beyond the usual downstream kernel cleanups (GCC
+compatibility, SELinux host includes, prebuilt cpio replacement, VLA
+initializers in the audio amplifier drivers).
+
+==== 1. Device tree: use the SoC base DTS, not the device overlay ====
+<code>light.dts</code> is a <code>/plugin/</code> overlay and is '''not''' a
+bootable DTB. The base device tree is <code>mediatek/mt6833.dts</code>, which
+is not listed in the MediaTek DTB Makefile and therefore never built.
+
+Add it to <code>arch/arm64/boot/dts/mediatek/Makefile</code>:
+<pre>
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt6833.dtb
+</pre>
+
+Install the DTBs from the kernel APKBUILD's <code>package()</code>, since
+<code>downstreamkernel_package</code> does not do it:
+<pre>
+make dtbs_install O="$_outdir" ARCH="$_carch" \
+    INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs
+</pre>
+
+and set <code>deviceinfo_dtb="mediatek/mt6833"</code>.
+
+A good sanity check: the resulting <code>mt6833.dtb</code> is '''byte-for-byte
+identical''' to the DTB extracted from the stock boot image (164815 bytes).
+
+==== 2. The bootloader requires a compressed kernel ====
+Symptom: bootloop with no USB enumeration at all, the bootloader retrying the
+slot until it gives up.
+
+The stock boot image carries a gzip-compressed kernel (magic <code>1f 8b</code>),
+but <code>downstreamkernel_package</code> searches for
+<code>zImage-dtb</code>, <code>Image.gz-dtb</code>, <code>*zImage</code>,
+<code>Image</code> — '''<code>Image.gz</code> is not in that list''', so it
+installs the raw <code>Image</code>. Fix it in <code>package()</code>:
+<pre>
+export KERNEL_IMAGE_NAME="Image.gz"
+</pre>
+
+==== 3. NULL dereference in u_serial (gs_close) ====
+Symptom: kernel panic roughly 9 seconds into boot, in a <code>getty</code>
+process, then reboot — a bootloop.
+
+<pre>
+Unable to handle kernel NULL pointer dereference at virtual address 170
+[getty] gs_close+0x38/0x2b0
+        tty_release+0x11c/0x670
+        tty_open+0x144/0x4dc
+</pre>
+
+<code>gs_open()</code> in
+<code>drivers/usb/gadget/function/u_serial.c</code> only assigns
+<code>tty->driver_data</code> near its end, after several early error returns.
+The tty layer still calls <code>gs_close()</code> on the release path of such a
+failed open, and <code>gs_close()</code> dereferences the pointer without
+checking. 0x170 is the offset of <code>port_lock</code> inside
+<code>struct gs_port</code>.
+
+<pre>
+--- a/drivers/usb/gadget/function/u_serial.c
++++ b/drivers/usb/gadget/function/u_serial.c
+@@ gs_close()
+  struct gs_port *port = tty->driver_data;
+  struct gserial *gser;
+
++ if (!port)
++     return;
++
+  spin_lock_irq(&port->port_lock);
+</pre>
+
+Seven other functions in the same file also use
+<code>tty->driver_data</code> without a NULL check; they were not on the
+observed crash path but are candidates for similar panics.
+
+==== 4. NULL dereference in the MediaTek DRM GEM ION import ====
+Symptom: kernel panic about 10 seconds into boot, in the Wayland compositor
+process, as soon as a graphical session starts.
+
+<pre>
+[compositor] mtk_gem_ion_import_dma_buf+0x58/0x160
+             mtk_gem_prime_import+0x50/0x188
+             drm_gem_prime_fd_to_handle+0xb4/0x1cc
+             drm_ioctl
+</pre>
+
+In <code>drivers/gpu/drm/mediatek/mtk_drm_gem.c</code>,
+<code>ion_import_dma_buf()</code> returns an ERR_PTR on failure, but
+<code>handle->buffer</code> is dereferenced immediately afterwards — '''before'''
+the <code>IS_ERR(handle)</code> check that the caller performs. ION is the
+Android memory allocator and is not set up under postmarketOS, so the import
+always fails.
+
+Guard both the NULL ION client and the returned handle, and normalise NULL into
+an error pointer (the caller only tests <code>IS_ERR</code>).
+
+This stops the panic. It does '''not''' make the compositor work — the PRIME
+import simply fails cleanly instead of killing the kernel.
+
+== deviceinfo notes ==
+Boot image parameters were taken from the stock boot image: header version 2,
+page size 2048, base 0x00000000, kernel offset 0x40080000, ramdisk offset
+0x51100000, tags and DTB offset 0x47c80000, cmdline
+<code>bootopt=64S3,32N2,64N2 buildvariant=user</code>.
+
+=== 4096-byte sectors ===
+The UFS storage uses '''4096-byte logical sectors'''. Without accounting for
+this, the initramfs fails with:
+<pre>
+Trying to mount subpartitions for 10 seconds...
+ERROR: failed to mount subpartitions!
+</pre>
+
+<code>mount_subpartitions()</code> only probes a partition when
+<code>fdisk</code> reports exactly two partitions on it. Read with the wrong
+geometry, the nested GPT shows a single entry (the protective MBR), so it never
+proceeds. Two changes are required, because the image must both be '''created'''
+and '''read''' with the right geometry:
+
+* <code>deviceinfo_rootfs_image_sector_size="4096"</code> (used by the initramfs for <code>losetup --sector-size</code>)
+* <code>pmbootstrap install --sector-size 4096</code>
+
+Verify by checking that the <code>EFI PART</code> signature sits at offset 4096
+in the generated image rather than at 512.
+
+Note that <code>boot_size</code> is effectively multiplied by 8 with this
+geometry: a configured 60 MB yields a 480 MB boot partition.
+
+== Installation ==
+The device is A/B. <code>fastboot flash boot</code> resolves to the active slot
+(<code>has-slot:boot</code> returns <code>yes</code>). The rootfs goes to
+<code>userdata</code>, which is shared between slots.
+
+Verified boot must be disabled or the custom boot image is rejected:
+<pre>
+avbtool make_vbmeta_image --flags 2 --padding_size 2048 --output vbmeta.img
+fastboot flash vbmeta vbmeta.img
+</pre>
+
+Note that <code>fastboot --disable-verity --disable-verification flash</code>
+fails with <code>Failed to find AVB_MAGIC at offset: 0</code>; the image
+generated by avbtool already carries the flag, so plain
+<code>fastboot flash</code> is what works.
+
+== Known issues ==
+
+=== No display output ===
+The screen keeps whatever the bootloader drew. The kernel '''does''' drive the
+panel: the initramfs on-screen keyboard renders through
+<code>/dev/fb0</code>, so DRM registers and the framebuffer works.
+
+Two separate problems:
+* The kernel has <code>CONFIG_VT=y</code> but '''not''' <code>CONFIG_FRAMEBUFFER_CONSOLE</code>, so virtual terminals are never drawn. Enabling it '''breaks the boot''' — panic at about 1.3 s, before the initramfs, with no framebuffer console messages in the log. Cause not understood.
+* Wayland compositors fail in the DRM PRIME import path described above.
+
+=== SSH sessions do not work ===
+Authentication succeeds and the session is fully set up — the server forks,
+switches to the user and spawns the login shell — but '''no data flows in
+either direction''', with or without a PTY. Both processes sit in ordinary
+interruptible waits (<code>do_select</code>, <code>do_sys_poll</code>). The
+server logs nothing after the successful authentication.
+
+Ruled out by measurement: CPU load (98% idle), memory (3.4 GB free), disk
+(2% used), missing shell or home directory, virtual console gettys, and the
+graphical stack (it fails identically on a console-only image).
+
+Two unrelated real defects were found and fixed along the way, neither of which
+resolved this:
+* <code>/etc/resolv.conf</code> pointed at <code>127.0.0.53</code>, the systemd-resolved stub, on an OpenRC system where nothing listens there.
+* <code>/dev/ptmx</code> was a standalone device node rather than a symlink to <code>pts/ptmx</code>, and devpts was mounted with <code>ptmxmode=000</code>.
+
+A busybox <code>telnetd</code> started from <code>/etc/local.d</code> works
+perfectly on the same device, which is what made it clear that PTYs, pipes and
+sockets are all fine.
+
+=== Load average without CPU usage ===
+Load average settles around 15 while the CPU is 98% idle and no userspace
+process is busy — kernel threads waiting on hardware that has no Android
+services driving it. Harmless in practice, but it makes ping latency on the USB
+link jump from 0.3 ms to roughly 90 ms, which is misleading when diagnosing.
+
+=== Charging ===
+Believed not to work. The device drains while running postmarketOS even when
+connected over USB.
+
+== Debugging notes ==
+
+=== Read panics from pstore ===
+The kernel has <code>CONFIG_PSTORE_RAM</code> and
+<code>CONFIG_PSTORE_CONSOLE</code>, so the console log survives a reboot. After
+a bootloop, boot with <code>pmos.debug-shell</code> on the kernel cmdline and
+read <code>/sys/fs/pstore/console-ramoops-0</code>. This is how both kernel
+panics above were found.
+
+The cmdline is a fixed 512-byte field in the boot image header, so
+<code>pmos.debug-shell</code> can be appended to an existing boot image without
+repacking it.
+
+=== The on-screen keyboard breaks the debug shell ===
+In the initramfs debug shell, <code>buffyboard</code> competes for terminal
+input and truncates typed lines erratically, anywhere from 32 down to 8
+characters. Run <code>pkill buffyboard</code> once per boot before doing any
+real work there.
+
+=== pmbootstrap only adds packages ===
+Changing <code>ui</code> does not remove the previous UI; packages are only
+ever added to the existing rootfs. Use <code>pmbootstrap install --zap</code>
+when removing things. Also note that apk runs <code>.post-install</code> only
+on a fresh install — declare <code>.post-upgrade</code> as well, or
+device-package fixups will silently stop being applied on rebuilds.
+
+=== pmos_continue_boot breaks USB ===
+Leaving the initramfs debug shell with <code>pmos_continue_boot</code> left the
+device without USB enumeration twice. Flashing a normal boot image and
+rebooting works. Use the debug shell for inspection, not for handing over to a
+usable system.
