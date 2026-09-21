@@ -47,6 +47,42 @@ If `pmbootstrap install` fails with `unable to select packages` naming an older
 pmbootstrap zap
 ```
 
+## Installing the device scripts
+
+The packages install the kernel and the device package. They do **not** install
+anything under `device-scripts/` — those are the userspace pieces that stand in
+for Android services, and they have to be put on the device by hand.
+
+Without them the device boots to a console with no compositor and no Wi-Fi.
+
+```sh
+# on the device
+install -m755 sobe-wifi.sh wifi-nvram-push.py wmt-daemon.py wmt-loader.py \
+              weston-thunder-launch sobe-weston le-reg.py /usr/local/bin/
+install -m644 weston-thunder.ini /etc/
+install -m755 init.d/weston-thunder      /etc/init.d/
+install -m755 init.d/touchscreen-thunder-wake /etc/init.d/
+install -m755 init.d/wifi-thunder        /etc/init.d/
+
+rc-update add touchscreen-thunder-wake default
+rc-update add weston-thunder            default
+rc-update add wifi-thunder              default
+```
+
+The connectivity firmware also has to be in `/lib/firmware/` — see
+[vendor-firmware.md](vendor-firmware.md).
+
+What each service does:
+
+| service | role |
+|---|---|
+| `touchscreen-thunder-wake` | unblanks the framebuffer, without which the touch controller never raises its interrupt |
+| `weston-thunder` | starts the compositor with the pixman software renderer |
+| `wifi-thunder` | runs the whole CONNSYS power-on before NetworkManager |
+
+`le-reg.py` is a debugging tool (reads physical registers through `/dev/mem`),
+not needed at runtime.
+
 ## Verifying before flashing
 
 ```sh

@@ -100,6 +100,9 @@ answer is probably in there.
 2. [docs/building.md](docs/building.md) — build with pmbootstrap
 3. [docs/flashing.md](docs/flashing.md) — **read this before flashing**, it
    wipes `userdata`
+4. [docs/building.md#installing-the-device-scripts](docs/building.md#installing-the-device-scripts)
+   — the packages do not install `device-scripts/`, and without them the device
+   boots to a bare console with no compositor and no Wi-Fi
 
 ## Licensing
 

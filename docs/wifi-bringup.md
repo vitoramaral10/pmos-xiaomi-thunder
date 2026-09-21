@@ -257,7 +257,7 @@ download completes intact — which also shows that the
 - **The factory MAC and RF calibration are available but not enabled by
   default.** See [the section below](#the-factory-mac-solved-mechanism-unusable-in-practice).
 - `opfunc_wlan_probe: not implemented yet hifType: 0x2` — harmless so far.
-- Bluetooth is untested even though its ROM patch loads.
+- Bluetooth does not work — see [the section below](#bluetooth).
 
 ## The factory MAC: solved mechanism, unusable in practice
 

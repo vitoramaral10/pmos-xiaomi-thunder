@@ -1,6 +1,6 @@
 {{Infobox device
 | manufacturer = Xiaomi
-| name = POCO M4 5G
+| name = POCO M4 5G / Redmi 10 5G
 | codename = xiaomi-thunder
 | released = 2022
 | category = testing
@@ -13,18 +13,33 @@
 | architecture = aarch64
 | status_usbnet = Y
 | status_flashing = Y
-| status_touchscreen = ?
-| status_display = P
-| status_wifi = ?
+| status_touchscreen = Y
+| status_display = Y
+| status_wifi = Y
+| status_audio = Y
+| status_bluetooth = N
+| status_3d = N
+| status_battery = P
+| status_mobiledata = N
+| status_camera = N
 | status_xwayland = N
 | status_fde = ?
 | status_mainline = N
 }}
 
-'''Work in progress.''' This is an unofficial downstream port. The device boots
-postmarketOS, mounts its root filesystem and brings up USB networking, but
-there is '''no usable graphical output''' and '''SSH sessions do not work'''
-(see [[#Known issues]]). Do not expect a daily driver.
+'''Work in progress.''' This is an unofficial downstream port on the vendor
+4.19 kernel. Display, touchscreen, speaker audio and '''Wi-Fi''' work, and
+Weston starts at boot, so the device comes up to a graphical session and
+associates to a network on its own.
+
+Not working: Bluetooth, modem, cameras and GPU acceleration (the compositor
+runs on the pixman software renderer). The battery charges but the fuel gauge
+reports no level. '''SSH sessions do not work''' — dropbear accepts the
+connection but never allocates a pty (see [[#Known issues]]).
+
+Wi-Fi is the notable part: MT6833 connectivity has no mainline support, so this
+port reconstructs MediaTek's gen4m stack for the SoC and replaces the Android
+launcher daemon with small userspace services. Do not expect a daily driver.
 
 == Contributors ==
 * (add yourself)
