@@ -1,0 +1,49 @@
+--- a/drivers/gpu/drm/mediatek/mtk_drm_plane.c
++++ b/drivers/gpu/drm/mediatek/mtk_drm_plane.c
+@@ -471,16 +471,25 @@
+ 				     struct drm_plane_state *old_state)
+ {
+ 	struct mtk_plane_state *state = to_mtk_plane_state(plane->state);
++	struct drm_crtc *crtc = state->crtc;
+ 
+ 	state->pending.enable = false;
+ 	wmb(); /* Make sure the above parameter is set before update */
+ 	state->pending.dirty = true;
+ 
+ #ifdef MTK_DRM_ADVANCE
+-	if (!state->crtc) {
++	/* state->crtc is only filled in by the layer-blob path, which the
++	 * Android hardware composer drives and a plain DRM atomic compositor
++	 * never does. Fall back to the CRTC the plane was on, or the disable
++	 * never reaches the hardware and the overlay keeps scanning out a
++	 * buffer that is about to be freed.
++	 */
++	if (!crtc)
++		crtc = old_state->crtc;
++	if (!crtc) {
+ 		DDPPR_ERR("%s, empty crtc state\n", __func__);
+ 	} else {
+-		mtk_drm_crtc_plane_update(state->crtc, plane, state);
++		mtk_drm_crtc_plane_update(crtc, plane, state);
+ 	}
+ #endif
+ }
+--- a/drivers/gpu/drm/mediatek/mtk_drm_crtc.c
++++ b/drivers/gpu/drm/mediatek/mtk_drm_crtc.c
+@@ -5754,10 +5754,12 @@
+ #else
+ 		mtk_wb_atomic_commit(mtk_crtc);
+ #endif
+-	} else if (state->prop_val[CRTC_PROP_USER_SCEN] &
+-		USER_SCEN_BLANK) {
+-	/* plane disable at mtk_crtc_get_plane_comp_state() actually */
+-	/* following statement is for disable all layers during suspend */
++	} else {
++	/* With the layer blob the plane is also switched off in
++	 * mtk_crtc_get_plane_comp_state(); a plain DRM atomic compositor
++	 * never sets that blob, so this is the only place its layer is
++	 * turned off. Doing it twice is harmless.
++	 */
+ 
+ 		if (mtk_crtc->is_dual_pipe) {
+ 			struct mtk_plane_state plane_state_l;
