@@ -10,7 +10,7 @@
 maintainer=""
 pkgname=linux-xiaomi-thunder
 pkgver=4.19.191
-pkgrel=22
+pkgrel=23
 _commit=a40ceab8943703f33e935cb0b86d0f69aa2044dd
 # Drop do driver de conectividade MediaTek enxertado em prepare().
 _conndrop=mtk-connectivity-gen4m-mt6833-2
@@ -45,6 +45,7 @@ source="
 	build-mt6833-dtb.patch
 	fix-u-serial-null-close.patch
 	fix-mtk-gem-ion-null.patch
+	fix-mtk-gem-prime-import-fallback.patch
 	"
 builddir="$srcdir/Xiaomi_Kernel_OpenSource-$_commit"
 options="
@@ -188,4 +189,5 @@ d1ae3b4188dbc0521e343135fc60f695b55272db3d2f317978f0d34ce17740c3854341edc984cddd
 fa73e0a94c72f6aaaacc1bf59db5cc5462c75e70a51b517a88f4d035c42268aacae069e362cf8102899ea44eff06b1a42afbd2981a0515c2d6d99f216bcbe265  build-mt6833-dtb.patch
 bc6160fe11cc797d1e90bfe3de0b2f4b5e05c030dc9335d4ba77872a912bf59f6841f657069e7a1143ace787f1f47dddddf4eac490c94f08a09562b69538d83b  fix-u-serial-null-close.patch
 ac7416fd499bfe96702c5766018289ab710e68812d9e4c6e311a0015ac426f9f70b5dc4bf9693dc253e1477086ec0cda1209e26ec2687f521de8491fa9c7d5ce  fix-mtk-gem-ion-null.patch
+79c0fa004ac4a7f8fda5d7fcd0aae07cb5c4642621fff70bb093d6cf1e71301dc83dbb0a6bbd284ebfaa534813f60b3dd8c9e81f8f5c94112ba05612f6975edf  fix-mtk-gem-prime-import-fallback.patch
 "
