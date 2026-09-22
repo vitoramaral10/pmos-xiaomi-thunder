@@ -145,4 +145,15 @@ DCONF
 	dconf update || true
 fi
 
+# 11) O seatd sobe no runlevel boot, antes do greetd.
+#     As duas sessoes (greeter e Phosh) exportam LIBSEAT_BACKEND=seatd, mas o
+#     servico do greetd nao declara o seatd. Enquanto o aparelho bootava no
+#     Weston, quem subia o seatd era o weston-thunder (need seatd); sem ele o
+#     greetd cai no boot com "status: crashed" e a tela fica preta. O runlevel
+#     boot termina antes do default, entao a ordem nao depende de nada, e o
+#     seatd esta em depends, entao o script dele ja existe aqui. Idempotente.
+if command -v rc-update >/dev/null 2>&1; then
+	rc-update add seatd boot 2>/dev/null || true
+fi
+
 exit 0
