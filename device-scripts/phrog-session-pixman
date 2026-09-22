@@ -1,0 +1,20 @@
+#!/bin/sh
+# Sessao do phrog/phosh forcando renderizacao por software.
+# A Mali-G57 nao tem driver de userspace livre neste kernel, e o caminho de import
+# de dmabuf via ION nao existe no pmOS — entao wlroots tem de usar pixman e o GTK
+# tem de usar cairo, senao o compositor sobe sem desenhar.
+# O backend do logind desativa a sessao e faz o phoc liberar o display;
+# desligar o CRTC trava este painel. O Weston usa seatd e fica estavel.
+export LIBSEAT_BACKEND=seatd
+export WLR_RENDERER=pixman
+export WLR_NO_HARDWARE_CURSORS=1
+export WLR_BACKENDS=drm,libinput
+export GSK_RENDERER=cairo
+export GDK_BACKEND=wayland
+export LIBGL_ALWAYS_SOFTWARE=1
+# O sandbox do glycin usa bwrap com a API nova de montagem (open_tree),
+# que so existe no kernel 5.2+. Neste 4.19 ele falha com ENOSYS e o GTK
+# aborta ao nao conseguir carregar nenhum icone SVG.
+export GLYCIN_DISABLE_SANDBOX=1
+
+exec /usr/libexec/phrog-greetd-session "$@"
