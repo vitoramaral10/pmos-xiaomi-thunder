@@ -36,7 +36,7 @@
 | status_flashing = Y
 | status_usbnet   = Y
 | status_emmc     = Y
-| status_battery  = P
+| status_battery  = Y
 | status_screen   = Y
 | status_touch    = Y
 
@@ -62,9 +62,10 @@ graphical session, associates to a network and brings its Bluetooth controller
 up on its own.
 
 Not working: modem, cameras and GPU acceleration (the compositor
-runs on the pixman software renderer). The battery charges but the fuel gauge
-reports no level. '''SSH sessions do not work''' — dropbear accepts the
-connection but never allocates a pty (see [[#Known issues]]).
+runs on the pixman software renderer). The battery charges and, since kernel
+r26, the fuel gauge reports a level. SSH works over Wi-Fi but stalls over the
+USB link (see [[#Known issues]]). Phosh logs in and its session stays up, but
+the device still boots to Weston by default.
 
 Connectivity is the notable part: MT6833 has no mainline support for it, so
 this port reconstructs MediaTek's gen4m stack for the SoC and replaces the
@@ -310,9 +311,18 @@ The kernel does drive the panel independently of this: the initramfs on-screen
 keyboard renders through <code>/dev/fb0</code>, so DRM registers and the
 framebuffer works.
 
-=== SSH sessions do not work ===
-Authentication succeeds and the session is fully set up — the server forks,
-switches to the user and spawns the login shell — but '''no data flows in
+=== SSH does not work over the USB link ===
+'''Over Wi-Fi, SSH with key authentication works normally''' — a full kernel
+log and a 5 MB transfer came through intact. The failure is specific to the
+USB link, whose RNDIS interface reports a receive error on almost every packet:
+the TCP handshake, the banner and <code>KEXINIT</code> pass, and the larger key
+exchange reply never arrives. An earlier reading blamed dropbear, and it was
+wrong: the test that seemed to confirm it measured nothing, because the
+listener tool was missing on the host and the host firewall blocked the test's
+return channel.
+
+Earlier rounds over the cable, on older kernels, got further: authentication
+succeeded and the session was fully set up — the server forks, switches to the user and spawns the login shell — but '''no data flows in
 either direction''', with or without a PTY. Both processes sit in ordinary
 interruptible waits (<code>do_select</code>, <code>do_sys_poll</code>). The
 server logs nothing after the successful authentication.
