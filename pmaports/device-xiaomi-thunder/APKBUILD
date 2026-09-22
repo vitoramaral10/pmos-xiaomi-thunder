@@ -10,17 +10,22 @@
 maintainer=""
 pkgname=device-xiaomi-thunder
 pkgver=1
-pkgrel=8
+pkgrel=9
 pkgdesc="Xiaomi POCO M4 5G"
 url="https://postmarketos.org"
 arch="aarch64"
 license="MIT"
+# stevia-schemas: o pacote do teclado de tela (stevia) entrega o binario, mas
+# poe o schema GSettings num subpacote a parte que nada puxa. Sem ele o teclado
+# morre com GLib-GIO-ERROR "Settings schema 'mobi.phosh.osk' is not installed",
+# e como e componente OBRIGATORIO da sessao, o Phosh inteiro nao sobe.
 depends="
 	android-tools-mkbootimg
 	linux-xiaomi-thunder
 	postmarketos-base
 	postmarketos-base-downstream
 	busybox-extras
+	stevia-schemas
 	"
 makedepends="devicepkg-dev"
 install="$pkgname.post-install $pkgname.post-upgrade"
@@ -31,6 +36,8 @@ source="
 	$pkgname.post-install
 	$pkgname.post-upgrade
 	touchscreen-thunder-wake.initd
+	phrog-session-pixman
+	phosh-session-thunder
 	nt36672c_tm_01_ts_fw.bin
 	nt36672c_tm_01_ts_mp.bin
 	"
@@ -49,6 +56,15 @@ package() {
 	# O runlevel e adicionado no .post-install / .post-upgrade.
 	install -D -m755 "$srcdir"/touchscreen-thunder-wake.initd \
 		"$pkgdir"/etc/init.d/touchscreen-thunder-wake
+
+	# Ambiente das sessoes graficas. O greeter e a sessao do usuario sobem por
+	# caminhos totalmente separados e NENHUM dos dois recebe por padrao o que
+	# este aparelho precisa, entao cada um tem seu proprio script.
+	# O .post-install aponta o greetd e o phosh.desktop para ca.
+	install -D -m755 "$srcdir"/phrog-session-pixman \
+		"$pkgdir"/usr/bin/phrog-session-pixman
+	install -D -m755 "$srcdir"/phosh-session-thunder \
+		"$pkgdir"/usr/bin/phosh-session-thunder
 }
 
 nonfree_firmware() {
@@ -78,9 +94,11 @@ nonfree_firmware() {
 sha512sums="
 d6f889d725cc47cc90cdd860f34c2a625ef2c4e9ee88c8bf264edbb1bdb3a9dbc58d5e3a62f465fc73da16c5e65e034221e2c3a680a0865b332737a97b0c3c0a  deviceinfo
 e70bae17df23dcaaaea0e2d3616556f04baa23f8ee1357785c0f539bf97282d8ddff53953e155b72689bb73beb38c2da3d08de2a61e866684edfa10a6593885d  modules-initfs
-e78ff843de90dfab744dfbb37e1aff23ed34c6f05fb3b181372d580c453420e79accd150d20feefd0af377007e54bef8d10f9909054cd6d7a310cec315332af1  device-xiaomi-thunder.post-install
-e78ff843de90dfab744dfbb37e1aff23ed34c6f05fb3b181372d580c453420e79accd150d20feefd0af377007e54bef8d10f9909054cd6d7a310cec315332af1  device-xiaomi-thunder.post-upgrade
+7465efa4cfa57f0ac666b784b7fabad0f987ec0611bf8aa496912cce81f13ab97763820e76e9fe448a4758cfdccac9ab180f96720151563322b6a8b19b430708  device-xiaomi-thunder.post-install
+7465efa4cfa57f0ac666b784b7fabad0f987ec0611bf8aa496912cce81f13ab97763820e76e9fe448a4758cfdccac9ab180f96720151563322b6a8b19b430708  device-xiaomi-thunder.post-upgrade
 498fc3916e4fe7a2b347122ff3a888a4d2d25e57516a3df1fe34a6f8b57d0deb3c0487d491164d0af1da2382deead49c9cdd33e694dedb717cfafdd477192f29  touchscreen-thunder-wake.initd
+6e9d745c63e16137e180dc285a15110bd68fac4aaea7c0c1d919b41422dfa0963a1ae4d43444a8457c887dbf4a74651cbb0b008a4418c56b415cc84a619937f8  phrog-session-pixman
+f0c4d311e58ab4939f83f691803447c501f4845c59aa1a802dbc71f013de02b3f2c94ea3224f58c90ac70ffca42853612ed2a198ec11812a0721fea1b3203f56  phosh-session-thunder
 f21887fd00ca8dfe8730385cda143ef5a8f7ac637c98ba30a4b176da04883084a4ca5803634b595115119fdb677803fec8e238a3bfeed285f5288cff1ab9a1a8  nt36672c_tm_01_ts_fw.bin
 b3c45c5575d4b95690e0c8407ad1fefbafb9267e21d2ae1b76edba1d8d9483d207b313dfeb16d3054c54fc23a1b233805e4b3b21cfdaeb59a6ecd691112eead7  nt36672c_tm_01_ts_mp.bin
 "

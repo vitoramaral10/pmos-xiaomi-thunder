@@ -1,0 +1,19 @@
+#!/bin/sh
+# Sessao do greeter (phrog) com o ambiente que este aparelho exige.
+#
+# LIBSEAT_BACKEND=seatd e' o decisivo: com o backend do logind a sessao e'
+# desativada, o phoc libera o display e desligar o CRTC trava este painel ate'
+# o watchdog de hardware resetar o aparelho. O Weston sempre usou seatd e nao
+# cai. Com esta linha, todo "Failed to disable CRTC" sumiu dos logs.
+export LIBSEAT_BACKEND=seatd
+
+# A Mali-G57 nao tem driver de userspace livre neste kernel e nao ha' render
+# node, entao wlroots renderiza com pixman e o GTK com cairo.
+export WLR_RENDERER=pixman
+export WLR_NO_HARDWARE_CURSORS=1
+export WLR_BACKENDS=drm,libinput
+export GSK_RENDERER=cairo
+export GDK_BACKEND=wayland
+export LIBGL_ALWAYS_SOFTWARE=1
+
+exec /usr/libexec/phrog-greetd-session "$@"

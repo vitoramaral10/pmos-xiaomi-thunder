@@ -45,4 +45,48 @@ if command -v rc-update >/dev/null 2>&1; then
 	rc-update add touchscreen-thunder-wake default || true
 fi
 
+# 5) Acesso ao assento (seat) para quem roda compositor.
+#    /run/seatd.sock e' srwxrwx--- root:seat. Sem estar no grupo, o phoc leva
+#    "Could not connect to socket /run/seatd.sock: Permission denied" e a
+#    sessao grafica nao nasce. Vale para o usuario do greeter e para os
+#    usuarios humanos do aparelho.
+if getent group seat >/dev/null 2>&1; then
+	getent passwd greetd >/dev/null 2>&1 && addgroup greetd seat 2>/dev/null || true
+	for _u in $(awk -F: '$3 >= 1000 && $3 < 65000 { print $1 }' /etc/passwd); do
+		addgroup "$_u" seat 2>/dev/null || true
+	done
+fi
+
+# 6) Syslog no boot.
+#    Sem ele, greetd, phoc e a sessao logam no vazio: as mensagens vao para
+#    syslog e nao existe quem as receba. Foi o que tornou o greeter impossivel
+#    de diagnosticar. O busybox syslogd daqui grava em buffer na memoria
+#    (-C no /etc/conf.d/syslog), entao nao ha desgaste de flash.
+if command -v rc-update >/dev/null 2>&1; then
+	rc-update add syslog boot 2>/dev/null || true
+fi
+
+# 7) Desliga o usb-signaller.
+#    Ele entra em panico de kernel ao desmontar o gadget USB:
+#      sysfs_remove_file_ns <- device_remove_file <- gadgets_drop
+#      <- configfs_rmdir <- vfs_rmdir2 <- do_rmdir <- unlinkat
+#    Desreferencia nula em sysfs_remove_file_ns, reproduzida duas vezes com a
+#    mesma pilha. Enquanto o bug do gadget nao for corrigido, o servico nao
+#    pode subir.
+if command -v rc-update >/dev/null 2>&1; then
+	rc-update del usb-signaller default 2>/dev/null || true
+fi
+
+# 8) Aponta greeter e sessao para os scripts de ambiente do pacote.
+#    Nem o phrog nem o phosh-session recebem por padrao o que este aparelho
+#    precisa (ver comentarios nos proprios scripts). Idempotente.
+if [ -f /etc/phrog/greetd-config.toml ]; then
+	sed -i 's|^command = .*|command = "/usr/bin/phrog-session-pixman"|' \
+		/etc/phrog/greetd-config.toml
+fi
+if [ -f /usr/share/wayland-sessions/phosh.desktop ]; then
+	sed -i 's|^Exec=.*|Exec=/usr/bin/phosh-session-thunder|' \
+		/usr/share/wayland-sessions/phosh.desktop
+fi
+
 exit 0

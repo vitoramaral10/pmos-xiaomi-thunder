@@ -1,0 +1,17 @@
+#!/bin/sh
+# O phosh-session nao define XDG_CURRENT_DESKTOP e o phosh.desktop nao traz
+# DesktopNames=, entao o gnome-session nao casa o OnlyShowIn=GNOME da concha
+# (mobi.phosh.Shell) e a sessao fica no spinner para sempre.
+export XDG_CURRENT_DESKTOP=Phosh:GNOME
+# Com o backend do logind a sessao e' desativada e o phoc libera o display;
+# desligar o CRTC trava este painel e o watchdog reseta o aparelho.
+export LIBSEAT_BACKEND=seatd
+export WLR_RENDERER=pixman
+export WLR_NO_HARDWARE_CURSORS=1
+export WLR_BACKENDS=drm,libinput
+export GSK_RENDERER=cairo
+export GDK_BACKEND=wayland
+export LIBGL_ALWAYS_SOFTWARE=1
+# Espera o phoc do greeter soltar o seat0, senao o seatd fecha a conexao nova.
+sleep 3
+exec /usr/bin/phosh-session "$@"
