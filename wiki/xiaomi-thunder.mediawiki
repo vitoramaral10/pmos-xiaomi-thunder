@@ -57,15 +57,13 @@
 
 '''Work in progress.''' This is an unofficial downstream port on the vendor
 4.19 kernel. Display, touchscreen, speaker audio, '''Wi-Fi''' and
-'''Bluetooth''' work, and Weston starts at boot, so the device comes up to a
-graphical session, associates to a network and brings its Bluetooth controller
-up on its own.
+'''Bluetooth''' work, and the device boots into Phosh, associates to a network
+and brings its Bluetooth controller up on its own.
 
 Not working: modem, cameras and GPU acceleration (the compositor
 runs on the pixman software renderer). The battery charges and, since kernel
 r26, the fuel gauge reports a level. SSH works over Wi-Fi but stalls over the
-USB link (see [[#Known issues]]). Phosh logs in and its session stays up, but
-the device still boots to Weston by default.
+USB link (see [[#Known issues]]).
 
 Connectivity is the notable part: MT6833 has no mainline support for it, so
 this port reconstructs MediaTek's gen4m stack for the SoC and replaces the
