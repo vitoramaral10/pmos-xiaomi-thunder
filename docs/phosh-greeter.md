@@ -4,9 +4,9 @@ State: the greeter (greetd + phrog) renders, accepts a password and logs in,
 and the full Phosh session reaches `RUNNING` with all of its GNOME components.
 With kernel `r26` the session stays up: the power button blanks and unblanks
 the screen, and the phone no longer switches itself off a minute into the
-session. That is measured over one 2.5-minute run with a lock and an unlock,
-not over hours, so the device still boots to Weston and `greetd` stays out of
-every runlevel until longer runs back it up.
+session. Since device `r11` the phone boots straight into the greeter. Weston
+stays installed as a fallback, out of the boot sequence:
+`rc-service weston-thunder start`.
 
 ## What had to be fixed
 
@@ -292,6 +292,11 @@ gets it by default. See `device-scripts/phrog-session-pixman` and
   `phosh.desktop` carries no `DesktopNames=`, so `gnome-session` never matches
   `OnlyShowIn=GNOME` on `mobi.phosh.Shell` and the session spins forever
   without ever starting the shell.
+- `seatd` in the `boot` runlevel. greetd does not declare it, and while the
+  device booted to Weston it only came up as a dependency of the Weston
+  service. With Weston out of the boot, greetd crashed at boot and left the
+  screen black. The `boot` runlevel finishes before `default`, where greetd
+  runs, so the order no longer depends on anything.
 - A short delay before the session takes the seat. Without it the greeter's
   phoc has not released `seat0` yet and seatd drops the new connection.
 - pixman and cairo: the Mali-G57 has no free userspace driver on this kernel,
