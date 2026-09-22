@@ -1,21 +1,34 @@
 # Temporary hack
-# Fork do aport do Alpine (main/glib) so' para um patch: em kernel < 5.8 nao
-# existe faccessat2(), e o faccessat() antigo nao aceita flags, entao o musl
-# devolve EINVAL para AT_SYMLINK_NOFOLLOW. O g_local_file_query_exists() do
-# glib trata isso como "arquivo nao existe" -- ou seja, NENHUM arquivo existe
-# para quem usa g_file_query_exists(). No xiaomi-thunder (4.19) isso derruba o
-# greeter: o appstream conclui que o catalogo sumiu e o phrog morre.
+# Fork do aport do Alpine (main/glib) so' para dois patches de kernel antigo.
+#
+# (1) faccessat: em kernel < 5.8 nao existe faccessat2(), e o faccessat()
+# antigo nao aceita flags, entao o musl devolve EINVAL para
+# AT_SYMLINK_NOFOLLOW. O g_local_file_query_exists() do glib trata isso como
+# "arquivo nao existe" -- ou seja, NENHUM arquivo existe para quem usa
+# g_file_query_exists(). No xiaomi-thunder (4.19) isso derruba o greeter: o
+# appstream conclui que o catalogo sumiu e o phrog morre.
 #
 # O upstream ja contorna o mesmo EINVAL no Android e no Solaris via #ifdef de
 # plataforma; musl com kernel antigo nao esta coberto. O patch repete a
 # chamada sem flags em vez de declarar o arquivo inexistente.
+#
+# (2) child watch: o waitid(P_PIDFD) so existe a partir do 5.4, mas
+# pidfd_open() e CLONE_PIDFD foram retroportados para o 4.19 do Android --
+# e este kernel e um deles (kernel/fork.c tem CLONE_PIDFD;
+# include/uapi/linux/wait.h nao tem P_PIDFD). O glib entao abre o pidfd com
+# sucesso e falha depois, no dispatch, com EINVAL, entregando ao chamador o
+# status de espera -1 -- valor em que nem WIFEXITED() nem WIFSIGNALED() vale.
+# O gnome-session so tira um app de pending_apps quando um dos dois vale,
+# entao a fase EARLY_INITIALIZATION nunca fecha e a sessao fica no spinner
+# para sempre, com os filhos virando zumbis. O patch testa o kernel uma vez
+# (com WNOWAIT, que nao consome nada) e cai para o caminho de SIGCHLD.
 # Contributor: Rasmus Thomsen <oss@cogitri.dev>
 # Contributor: Valery Kartel <valery.kartel@gmail.com>
 maintainer="team/gnome <achill@achill.org>"
 pkgname=glib
 pkgver=2.90.0
 _gi_version=1.86.0
-pkgrel=1
+pkgrel=2
 # NOTE: Upgrade only to even-numbered versions (e.g. 1.18.x, 1.20.x)!
 pkgdesc="Low-level core library that forms the basis for projects such as GTK and GNOME"
 url="https://developer.gnome.org/glib/"
@@ -58,6 +71,7 @@ source="https://download.gnome.org/sources/glib/${pkgver%.*}/glib-$pkgver.tar.xz
 	tests-machine-id.patch
 	flaky-tests.patch
 	faccessat-fallback-old-kernels.patch
+	child-watch-waitid-pidfd-fallback.patch
 	"
 
 # 2.80 moves gir here
@@ -161,4 +175,5 @@ a9d2edbe1cea710e10ef1ea8059a45cf5689bace43b5d2a6861809e863a6de7114b4763db8df3916
 4f561bfede4a559b314195aa4b7b5923a52c62063e6dd33b4933ad53b29c32ef789d69b9f7b17d8d701323006366e6b7acbb083a68674c1c535c185d35cc5d1f  tests-machine-id.patch
 268cf6f089274f29285242f1e29bf5650e85f9fcb5744df884deb139493cc25792ad78487113732665f1c5393c94b2f76f97093a1a003e3caaf65c07960a1bf9  flaky-tests.patch
 50c7a2bae95b765286032bed7d97a2676845ae827b137773eeaa3b28c21629533d86ad20c61c0034fa3bed2d91e61bace686fe0feabf108a139c232ed441d624  faccessat-fallback-old-kernels.patch
+708e1645f5bbea7563df3ab3b071638125756210c4db30ddc34bba7a1fb3f2f3196ce917cfb53e72d1a3a14f6f3cf3c47279918468fb79eb50f3350d1d77f942  child-watch-waitid-pidfd-fallback.patch
 "
