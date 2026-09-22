@@ -1,0 +1,25 @@
+--- a/net/ipv6/sysctl_net_ipv6.c
++++ b/net/ipv6/sysctl_net_ipv6.c
+@@ -251,9 +251,19 @@
+ 	if (!net->ipv6.sysctl.hdr)
+ 		goto out_ipv6_icmp_table;
+ 
+-	vzw_hdr = register_net_sysctl(net, "net", net_table);
+-	if (!vzw_hdr)
+-		pr_info("[mtk_net] register net sysctl optr is fail.\n");
++	/* net.optr points at one global int, so registering it in every
++	 * namespace buys nothing, and the header was never kept nor
++	 * unregistered: each namespace teardown then tripped the WARN in
++	 * retire_sysctl_set() and left the table hanging off the freed
++	 * struct net. Anything that sandboxes with a network namespace
++	 * (bubblewrap, and so glycin under GTK4) hit it until the device
++	 * locked up. Register it once, in the namespace that never dies.
++	 */
++	if (net_eq(net, &init_net)) {
++		vzw_hdr = register_net_sysctl(net, "net", net_table);
++		if (!vzw_hdr)
++			pr_info("[mtk_net] register net sysctl optr is fail.\n");
++	}
+ 
+ 	net->ipv6.sysctl.route_hdr =
+ 		register_net_sysctl(net, "net/ipv6/route", ipv6_route_table);

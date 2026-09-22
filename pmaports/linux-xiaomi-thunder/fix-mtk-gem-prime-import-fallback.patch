@@ -1,0 +1,29 @@
+--- a/drivers/gpu/drm/mediatek/mtk_drm_gem.c
++++ b/drivers/gpu/drm/mediatek/mtk_drm_gem.c
+@@ -585,9 +585,13 @@
+ 	handle = mtk_gem_ion_import_dma_buf(client, dma_buf,
+ 			__func__, __LINE__);
+ 	if (IS_ERR(handle)) {
+-		DDPPR_ERR("ion import failed, client:0x%p, dmabuf:0x%p\n",
+-				client, dma_buf);
+-		return ERR_PTR(-EINVAL);
++		/* Not an ION buffer. A plain DRM dumb buffer exported and
++		 * re-imported through PRIME lands here, which is what every
++		 * wlroots compositor does. Fall through to the generic DRM
++		 * import path; the free path already tests ->handle before
++		 * touching the ION client.
++		 */
++		handle = NULL;
+ 	}
+ 
+ #endif
+@@ -597,7 +601,8 @@
+ 
+ 	mtk_gem = to_mtk_gem_obj(obj);
+ #if defined(CONFIG_MTK_IOMMU_V2)
+-	mtk_gem->handle = handle;
++	if (handle)
++		mtk_gem->handle = handle;
+ 
+ 	DDPDBG("%s:%d client:0x%p, handle=0x%p obj:0x%p, gem:0x%p -\n",
+ 		   __func__, __LINE__,

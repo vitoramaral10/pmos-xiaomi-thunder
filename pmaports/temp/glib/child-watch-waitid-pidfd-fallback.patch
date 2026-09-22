@@ -1,0 +1,58 @@
+--- a/glib/gmain.c
++++ b/glib/gmain.c
+@@ -5915,6 +5915,40 @@
+       return W_STOPCODE (info->si_status);
+     }
+ }
++
++/* Linux only gained waitid(P_PIDFD) in 5.4, but pidfd_open() and CLONE_PIDFD
++ * were backported to older vendor kernels -- notably the Android 4.19 series,
++ * which many downstream phone kernels are based on. There, the pidfd_open()
++ * below succeeds and the watch then fails in g_child_watch_dispatch() with
++ * EINVAL, leaving a wait status of -1: a value for which neither WIFEXITED()
++ * nor WIFSIGNALED() holds, so callers never learn that the child is gone and
++ * wait for it forever. Probe the kernel once -- WNOWAIT consumes nothing --
++ * and fall back to the SIGCHLD path when waitid(P_PIDFD) is missing. */
++static gboolean
++pidfd_waitid_is_supported (int pidfd)
++{
++  static gint supported = -1;  /* -1 unknown, 0 no, 1 yes */
++  siginfo_t info = { 0, };
++  gint val;
++
++  val = g_atomic_int_get (&supported);
++  if (val >= 0)
++    return val == 1;
++
++  if (waitid (P_PIDFD, pidfd, &info, WEXITED | WNOHANG | WNOWAIT) < 0 &&
++      (errno == EINVAL || errno == ENOSYS))
++    val = 0;
++  else
++    val = 1;
++
++  g_atomic_int_set (&supported, val);
++
++  if (val == 0)
++    g_debug ("waitid(P_PIDFD) is not supported by this kernel; "
++             "falling back to the SIGCHLD child watch");
++
++  return val == 1;
++}
+ #endif /* HAVE_PIDFD */
+ 
+ static gboolean
+@@ -6525,6 +6559,14 @@
+    */
+   child_watch_source->poll.fd = (int) syscall (SYS_pidfd_open, pid, 0);
+ 
++  if (child_watch_source->poll.fd >= 0 &&
++      !pidfd_waitid_is_supported (child_watch_source->poll.fd))
++    {
++      close (child_watch_source->poll.fd);
++      child_watch_source->poll.fd = -1;
++      errno = ENOSYS;
++    }
++
+   if (child_watch_source->poll.fd >= 0)
+     {
+       child_watch_source->poll.events = G_IO_IN;

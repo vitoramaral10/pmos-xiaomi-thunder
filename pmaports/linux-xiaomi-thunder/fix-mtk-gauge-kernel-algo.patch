@@ -1,0 +1,88 @@
+--- a/drivers/power/supply/mediatek/battery/Kconfig
++++ b/drivers/power/supply/mediatek/battery/Kconfig
+@@ -27,6 +27,15 @@
+ 	  Set No to enable Gauge Master 3.0
+ 	  under new MTK Charger Framework
+ 
++config MTK_GAUGE_KERNEL_ALGO
++	bool "Run the Gauge Master 3.0 algorithm in the kernel"
++	default n
++	help
++	  Gauge Master 3.0 normally computes the state of charge in the
++	  Android fuelgauged daemon. Set Yes to run the in-kernel copy of
++	  the algorithm, otherwise only used in recovery, so that a
++	  userspace without that daemon still gets a battery capacity.
++
+ config MTK_ADDITIONAL_BATTERY_TABLE
+ 	bool "Enable the fifth battery table"
+ 	default y
+--- a/drivers/power/supply/mediatek/battery/mtk_battery.c
++++ b/drivers/power/supply/mediatek/battery/mtk_battery.c
+@@ -305,6 +305,22 @@
+ 	return false;
+ }
+ 
++/*
++ * The GM3.0 fuel gauge algorithm normally runs in the Android fuelgauged
++ * daemon, which talks to this driver over netlink. Recovery has no daemon,
++ * so the driver carries the same algorithm in-kernel (mtk_battery_recovery.c)
++ * for that case. A non-Android userspace has no daemon either: without the
++ * in-kernel algorithm nothing ever sets the UI SOC and the battery reports
++ * capacity -1 forever.
++ */
++static bool fg_use_kernel_algo(void)
++{
++	if (IS_ENABLED(CONFIG_MTK_GAUGE_KERNEL_ALGO) && !is_fg_disabled())
++		return true;
++
++	return is_recovery_mode();
++}
++
+ int battery_get_boot_mode(void)
+ {
+ 	struct device *dev = NULL;
+@@ -1353,7 +1369,7 @@
+ 
+ 	seq_puts(m, "\n");
+ 
+-	if (is_recovery_mode() == false) {
++	if (fg_use_kernel_algo() == false) {
+ 		dump_daemon_table(m);
+ 	} else {
+ 
+@@ -2170,7 +2186,7 @@
+ 		return -1;
+ 	}
+ 
+-	if (is_recovery_mode()) {
++	if (fg_use_kernel_algo()) {
+ 		wakeup_fg_algo_recovery(flow_state);
+ 		return 0;
+ 	}
+@@ -2228,7 +2244,7 @@
+ 		return -1;
+ 	}
+ 
+-	if (is_recovery_mode()) {
++	if (fg_use_kernel_algo()) {
+ 		wakeup_fg_algo_recovery(flow_state);
+ 		return 0;
+ 	}
+@@ -2285,7 +2301,7 @@
+ 		return -1;
+ 	}
+ 
+-	if (is_recovery_mode()) {
++	if (fg_use_kernel_algo()) {
+ 		wakeup_fg_algo_recovery(flow_state);
+ 		return 0;
+ 	}
+@@ -4802,7 +4818,7 @@
+ 		IS_ENABLED(CONFIG_MTK_DISABLE_GAUGE)) {
+ 		bm_err("disable GM 3.0\n");
+ 		disable_fg();
+-	} else if (is_recovery_mode())
++	} else if (fg_use_kernel_algo())
+ 		battery_recovery_init();
+ 
+ 	mtk_battery_last_init(dev);

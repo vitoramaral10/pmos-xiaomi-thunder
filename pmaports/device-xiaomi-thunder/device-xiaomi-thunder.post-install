@@ -45,4 +45,104 @@ if command -v rc-update >/dev/null 2>&1; then
 	rc-update add touchscreen-thunder-wake default || true
 fi
 
+# 5) Acesso ao assento (seat) para quem roda compositor.
+#    /run/seatd.sock e' srwxrwx--- root:seat. Sem estar no grupo, o phoc leva
+#    "Could not connect to socket /run/seatd.sock: Permission denied" e a
+#    sessao grafica nao nasce. Vale para o usuario do greeter e para os
+#    usuarios humanos do aparelho.
+if getent group seat >/dev/null 2>&1; then
+	getent passwd greetd >/dev/null 2>&1 && addgroup greetd seat 2>/dev/null || true
+	for _u in $(awk -F: '$3 >= 1000 && $3 < 65000 { print $1 }' /etc/passwd); do
+		addgroup "$_u" seat 2>/dev/null || true
+	done
+fi
+
+# 6) Syslog no boot.
+#    Sem ele, greetd, phoc e a sessao logam no vazio: as mensagens vao para
+#    syslog e nao existe quem as receba. Foi o que tornou o greeter impossivel
+#    de diagnosticar. O busybox syslogd daqui grava em buffer na memoria
+#    (-C no /etc/conf.d/syslog), entao nao ha desgaste de flash.
+if command -v rc-update >/dev/null 2>&1; then
+	rc-update add syslog boot 2>/dev/null || true
+fi
+
+# 7) Desliga o usb-signaller.
+#    Ele entra em panico de kernel ao desmontar o gadget USB:
+#      sysfs_remove_file_ns <- device_remove_file <- gadgets_drop
+#      <- configfs_rmdir <- vfs_rmdir2 <- do_rmdir <- unlinkat
+#    Desreferencia nula em sysfs_remove_file_ns, reproduzida duas vezes com a
+#    mesma pilha. Enquanto o bug do gadget nao for corrigido, o servico nao
+#    pode subir.
+if command -v rc-update >/dev/null 2>&1; then
+	rc-update del usb-signaller default 2>/dev/null || true
+fi
+
+# 8) Aponta greeter e sessao para os scripts de ambiente do pacote.
+#    Nem o phrog nem o phosh-session recebem por padrao o que este aparelho
+#    precisa (ver comentarios nos proprios scripts). Idempotente.
+if [ -f /etc/phrog/greetd-config.toml ]; then
+	sed -i 's|^command = .*|command = "/usr/bin/phrog-session-pixman"|' \
+		/etc/phrog/greetd-config.toml
+fi
+if [ -f /usr/share/wayland-sessions/phosh.desktop ]; then
+	sed -i 's|^Exec=.*|Exec=/usr/bin/phosh-session-thunder|' \
+		/usr/share/wayland-sessions/phosh.desktop
+fi
+
+# 9) Diz ao PAM que a sessao do greetd e' grafica.
+#    O greetd exporta XDG_SEAT, XDG_VTNR e XDG_SESSION_CLASS, mas nao
+#    XDG_SESSION_TYPE. Sem ele o pam_elogind registra a sessao como
+#    Type=unspecified, e ai o gnome-session anuncia "Could not get session id
+#    for session" e o agente de polkit do phosh nao acha a sessao do chamador.
+#    O pam_env precisa rodar ANTES do pam_elogind, que vem dentro do
+#    base-session -- dai a linha ser inserida na linha acima dele.
+#    Conferido no aparelho: com isto a sessao sai Type=wayland, Class=user,
+#    Seat=seat0. Idempotente.
+mkdir -p /etc/greetd
+printf 'XDG_SESSION_TYPE=wayland\n' > /etc/greetd/environment
+if [ -f /etc/pam.d/greetd ] && ! grep -q 'pam_env.so.*greetd/environment' /etc/pam.d/greetd; then
+	sed -i 's|^session include base-session|session optional pam_env.so readenv=1 envfile=/etc/greetd/environment\nsession include base-session|' \
+		/etc/pam.d/greetd
+fi
+
+# 10) Desliga o apagamento de tela por ociosidade.
+#     Sem isto o aparelho reseta cerca de 50 s depois que a sessao fica
+#     parada. A cadeia, capturada com o log do compositor e o do kernel
+#     transmitidos juntos pela rede:
+#       phosh-main: Phosh ready after 1.74s                    (t+0 s)
+#       phoc-wlroots: connector DSI-1: Failed to disable CRTC 64 (t+51 s)
+#       mtk_plane_atomic_disable, empty crtc state              (t+51 s)
+#       mtk_iommu_isr <<TRANSLATION FAULT>> port=L1_OVL_2L_RDMA0
+#         iova=0xfd2d6000 pa=0x0   (o mesmo dma_addr do GEM criado pelo phoc)
+#       ... faults sem parar ate o watchdog resetar
+#     Ou seja: o phosh manda o commit de blanking, neste driver desligar um
+#     plano e' no-op para um compositor DRM comum (o desligamento real mora no
+#     caminho do layer blob, que so' o compositor de hardware do Android
+#     percorre), o desligamento do CRTC falha, e o overlay segue varrendo um
+#     buffer cujo mapeamento de IOMMU ja foi desfeito.
+#     ATENCAO: isto NAO deixa o aparelho estavel. Tira do caminho um matador
+#     deterministico (o blanking automatico), e so'. O botao de travar apaga a
+#     tela pelo mesmo caminho e ainda derruba, e existe um segundo modo de
+#     falha, mudo, que continua acontecendo. Ver docs/phosh-greeter.md,
+#     bloqueio 8. KMS legado nao salva: WLR_DRM_NO_ATOMIC=1 e' lido por este
+#     phoc (a string esta no binario) e o desligamento falha igual.
+#     Vai como padrao de sistema do dconf para valer tambem para o greetd.
+#     Custo: a tela nunca apaga sozinha. Some quando o driver souber desligar
+#     um plano de verdade.
+if command -v dconf >/dev/null 2>&1; then
+	mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
+	if ! [ -f /etc/dconf/profile/user ]; then
+		printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
+	fi
+	cat > /etc/dconf/db/local.d/00-xiaomi-thunder-no-blank <<'DCONF'
+[org/gnome/desktop/session]
+idle-delay=uint32 0
+
+[org/gnome/desktop/screensaver]
+idle-activation-enabled=false
+lock-enabled=false
+DCONF
+	dconf update || true
+fi
+
 exit 0
