@@ -10,7 +10,7 @@
 maintainer=""
 pkgname=linux-xiaomi-thunder
 pkgver=4.19.191
-pkgrel=24
+pkgrel=25
 _commit=a40ceab8943703f33e935cb0b86d0f69aa2044dd
 # Drop do driver de conectividade MediaTek enxertado em prepare().
 _conndrop=mtk-connectivity-gen4m-mt6833-2
@@ -47,6 +47,7 @@ source="
 	fix-mtk-gem-ion-null.patch
 	fix-mtk-gem-prime-import-fallback.patch
 	fix-mtk-plane-disable-without-layer-blob.patch
+	fix-mtk-ipv6-optr-sysctl-netns-leak.patch
 	"
 builddir="$srcdir/Xiaomi_Kernel_OpenSource-$_commit"
 options="
@@ -192,4 +193,5 @@ bc6160fe11cc797d1e90bfe3de0b2f4b5e05c030dc9335d4ba77872a912bf59f6841f657069e7a11
 ac7416fd499bfe96702c5766018289ab710e68812d9e4c6e311a0015ac426f9f70b5dc4bf9693dc253e1477086ec0cda1209e26ec2687f521de8491fa9c7d5ce  fix-mtk-gem-ion-null.patch
 79c0fa004ac4a7f8fda5d7fcd0aae07cb5c4642621fff70bb093d6cf1e71301dc83dbb0a6bbd284ebfaa534813f60b3dd8c9e81f8f5c94112ba05612f6975edf  fix-mtk-gem-prime-import-fallback.patch
 2b853d5f5d7a6b2f8f89ef55565c6aed8ab29248af574121de154bfb4a8feec3b9ad9deda7b29d918a2379f4ebf81d507da3a7593630d3c9a472e836a05a4332  fix-mtk-plane-disable-without-layer-blob.patch
+c53dbcbf7ed884dac7b4eb742e38cd90309940bbf8ce19b63bb9bbfe29f370ff427d61f2065adaaf408539d20e201023ab45a8035ebe06f1f72df6a8017d3621  fix-mtk-ipv6-optr-sysctl-netns-leak.patch
 "
