@@ -367,6 +367,12 @@ Two details that are not obvious:
   exit code. `sobe-wifi.sh` has expected failures along the way — the second
   `SET_PATCH_NUM` ioctl legitimately returns EPERM, for instance — so the exit
   code would give false negatives.
+- **NetworkManager must leave `ap0`, `wlan1` and `p2p0` alone.** gen4m creates
+  all four interfaces, but only `wlan0` is a real station. Otherwise
+  `nmcli dev wifi connect` can bind the profile to `ap0` and fail with
+  `The Wi-Fi network could not be found` while the network is right there in
+  the scan. `device-scripts/xiaomi-thunder-wifi.conf` marks the other three
+  unmanaged; it goes in `/etc/NetworkManager/conf.d/`.
 
 ## Measured performance
 

@@ -28,7 +28,8 @@ The device page on the official wiki is
 | Wi-Fi | **works** | brought up at boot by an OpenRC service. 2.4/5 GHz, WPA2 and WPA3, ~133 Mbit/s measured over LAN. The factory MAC and RF calibration are available but off by default — see [wifi-bringup.md](docs/wifi-bringup.md#the-factory-mac-solved-mechanism-unusable-in-practice) |
 | Audio (speaker) | works | headphone path written but untested |
 | USB networking | works | RNDIS, the usual pmOS `172.16.42.1` |
-| Charging | works | the battery charges; the **fuel gauge does not** report a level |
+| Battery | **works** | charges, and since kernel `r26` the fuel gauge reports a level: it counts down unplugged and survives a reboot. The Gauge Master 3.0 algorithm runs in the kernel instead of Android's `fuelgauged` — see [phosh-greeter.md](docs/phosh-greeter.md), blocker 9 |
+| Phosh | partial | the greeter logs in and the session reaches `RUNNING`, blanks and unblanks with the power button and stays up. Not yet in a runlevel: the device still boots to Weston — see [phosh-greeter.md](docs/phosh-greeter.md) |
 | Bluetooth | **works** | brought up at boot by an OpenRC service. Scanning and pairing verified against a Linux host, BR/EDR and LE, coexisting with Wi-Fi. Factory address read from `nvdata` at run time. **Audio does not play** — A2DP negotiates and the link carries the stream, but the device has no audio session to consume it; see [bluetooth-bringup.md](docs/bluetooth-bringup.md#audio-negotiates-but-nothing-plays) |
 | Modem | not started | |
 | Cameras | not started | |
@@ -43,13 +44,14 @@ This is a **bring-up port**, not a hardened system. Two things you are opting
 into by installing it as-is:
 
 - **`device-xiaomi-thunder` enables a passwordless root telnet on the USB
-  link.** It exists because SSH does not work on this port yet — dropbear
-  accepts the connection but never allocates a pty, so telnet is currently the
-  only way in. It listens on the point-to-point USB network
+  link.** SSH with key authentication works over Wi-Fi, but over the USB link
+  the SSH key exchange stalls — the RNDIS link loses large TCP segments — so
+  telnet is the only way in over the cable, and the recovery path when Wi-Fi
+  is down. It listens on the point-to-point USB network
   (`172.16.42.0/24`), which is not routed, so a remote attacker cannot reach
   it — but **anyone who plugs a cable into the device gets root, with no
   password and no prompt.** The `post-install` script marks it TEMPORARY and it
-  should be removed the moment SSH works. If that trade is not acceptable to
+  should be removed once SSH works over the cable too. If that trade is not acceptable to
   you, strip that section from
   `pmaports/device-xiaomi-thunder/device-xiaomi-thunder.post-install` before
   building.
