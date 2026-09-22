@@ -1,0 +1,14 @@
+--- a/gio/glocalfile.c
++++ b/gio/glocalfile.c
+@@ -1294,7 +1294,10 @@
+     }
+   else if G_UNLIKELY (errno == EINVAL)
+     {
+-      g_critical ("g_local_file_query_exists: faccessat doesn't support supplied flags");
++      /* Linux before 5.8 has no faccessat2(), and the old faccessat() syscall
++       * takes no flags, so musl reports EINVAL for AT_SYMLINK_NOFOLLOW. Retry
++       * without flags instead of reporting every existing file as missing. */
++      return faccessat (AT_FDCWD, local->filename, F_OK, 0) == 0;
+     }
+ 
+   return FALSE;
