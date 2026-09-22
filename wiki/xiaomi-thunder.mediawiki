@@ -16,6 +16,7 @@
 | chipset = MediaTek MT6833 (Dimensity 700)
 | cpu     = 2x 2.2 GHz Cortex-A76, 6x 2.0 GHz Cortex-A55
 | gpu     = Mali-G57 MC2
+| display = 1080 x 2408
 | storage = 64/128 GB UFS
 | memory  = 4/6 GB
 | architecture = aarch64
@@ -87,6 +88,23 @@ repository).
 Note the two marketing/engineering codenames: the device package uses
 <code>thunder</code>, while the kernel defconfig and device tree use
 <code>light</code>.
+
+=== MediaTek connectivity drop ===
+Wi-Fi and Bluetooth both come from MediaTek's gen4m connectivity tree, grafted
+into the kernel source as a separate tarball rather than a patch (657 files of
+third-party code with no common history with the kernel tarball).
+
+The Bluetooth character driver <code>bt_drv</code>, which exposes
+<code>/dev/stpbt</code>, has to be taken from the '''wmt''' variant — the one
+that reaches the chip over the STP of <code>wmt_drv</code>. The
+<code>btif</code> and <code>connac2</code> variants assume
+<code>conninfra</code>, which belongs to the CONNAC2 generation (MT6893 and
+later) and does not exist on this SoC.
+
+The connectivity Makefile likewise has to come from a real MT6833 drop. The one
+shipped in the <code>light-u-oss</code> tarball hardcodes
+<code>MTK_COMBO_CHIP=CONNAC</code> and <code>WLAN_CHIP_ID=6765</code>, both
+wrong for this SoC.
 
 === Required patches ===
 Four fixes were needed beyond the usual downstream kernel cleanups (GCC
@@ -217,6 +235,53 @@ in the generated image rather than at 512.
 Note that <code>boot_size</code> is effectively multiplied by 8 with this
 geometry: a configured 60 MB yields a 480 MB boot partition.
 
+== Factory data in nvdata ==
+Both radios take per-unit data from the <code>nvdata</code> partition, which is
+mounted read-only to read it:
+
+* the Wi-Fi MAC address and the RF calibration data
+* the Bluetooth address, at <code>/APCFG/APRDEB/BT_Addr</code> — six bytes, sharing the OUI of the Wi-Fi MAC
+
+Reading the Bluetooth address is not optional: the controller firmware reports
+MediaTek's placeholder address until the real one is written to it. The service
+extracts it on first start and the bridge programs the controller.
+
+None of this belongs in a package — it differs per unit.
+
+== How to enter flash mode ==
+From the stock system or from recovery, <code>adb reboot bootloader</code>
+works.
+
+'''From postmarketOS it does not''', and the reason is worth knowing.
+<code>/bin/reboot</code> is a symlink to busybox, and busybox '''ignores the
+argument entirely''' — it always calls <code>reboot(RB_AUTOBOOT)</code>. The
+word <code>bootloader</code> is dropped with no error and no warning, and the
+device reboots straight back into postmarketOS.
+<code>echo b > /proc/sysrq-trigger</code> cannot work either, for a different
+reason: sysrq calls <code>emergency_restart()</code>, which skips the restart
+handlers.
+
+Both kernel hooks are present. <code>rtc_mark_fast()</code>
+(<code>drivers/misc/mediatek/rtc/mtk_rtc_common.c</code>) sets
+<code>RTC_FAST_BOOT</code> in an RTC spare register for the preloader to read,
+and <code>do_kernel_restart()</code> passes the command string to the restart
+handlers. What is missing is a caller that passes the string, which needs the
+four-argument form of the <code>reboot()</code> syscall with
+<code>LINUX_REBOOT_CMD_RESTART2</code> and a pointer to the text. No libc
+wrapper exposes that form — <code>reboot()</code> takes a single argument in
+both musl and glibc — so it has to be the raw syscall. Measured at roughly 8
+seconds from the call to the device enumerating in fastboot.
+
+=== Telling real fastboot from the USB gadget ===
+In normal operation the device enumerates as <code>18d1:d001</code>, which
+<code>usb.ids</code> labels "Nexus 4 (fastboot)". '''The label is misleading'''
+— that is the postmarketOS RNDIS gadget reusing the ID. Real fastboot is
+<code>18d1:d00d</code>.
+
+What separates them reliably is the interface class: <code>e0/01/03</code>
+driven by <code>rndis_host</code> for the gadget, <code>ff/42/03</code> for
+fastboot. <code>fastboot getvar product</code> answers <code>thunder</code>.
+
 == Installation ==
 The device is A/B. <code>fastboot flash boot</code> resolves to the active slot
 (<code>has-slot:boot</code> returns <code>yes</code>). The rootfs goes to
@@ -264,6 +329,20 @@ resolved this:
 A busybox <code>telnetd</code> started from <code>/etc/local.d</code> works
 perfectly on the same device, which is what made it clear that PTYs, pipes and
 sockets are all fine.
+
+=== Bluetooth audio negotiates but does not play ===
+Pairing and A2DP negotiation both succeed, so "Bluetooth works" needs a caveat.
+<code>pipewire-spa-bluez</code> is required and is not pulled in by default.
+With it installed, a host connects with <code>a2dp-sink</code> as the active
+profile and streams to the phone, and BlueZ on the phone creates a real
+transport — which stays <code>idle</code>. Nothing ever acquires the file
+descriptor, because PipeWire on the device creates no audio node for the
+connected peer. Measured: 40 samples over 80 seconds while the host was
+streaming, with zero Bluetooth audio nodes and zero hardware PCM playing.
+
+The cause sits below Bluetooth, in the session layer: the device has no user
+session at all — no <code>/run/user/</code>, no session bus, and PipeWire has
+to be started by hand as root.
 
 === Load average without CPU usage ===
 Load average settles around 15 while the CPU is 98% idle and no userspace
