@@ -128,4 +128,11 @@ if command -v rc-update >/dev/null 2>&1; then
 	rc-update add seatd boot 2>/dev/null || true
 fi
 
+# 12) O GNOME Software nao atualiza sozinho (/etc/dconf/db/local.d/
+#     10-xiaomi-thunder-no-auto-update). Com o polkit funcionando (kernel r30),
+#     a atualizacao automatica passou a rodar e trocou a glib e o bubblewrap
+#     refeitos para o 4.19 pelos do Alpine: o teclado de tela caia e o
+#     gnome-session desistia do greeter. O arquivo so vale depois do dconf update.
+command -v dconf >/dev/null 2>&1 && dconf update || true
+
 exit 0
