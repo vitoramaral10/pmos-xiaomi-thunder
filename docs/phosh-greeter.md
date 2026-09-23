@@ -10,7 +10,7 @@ stays installed as a fallback, out of the boot sequence:
 
 ## What had to be fixed
 
-Eleven blockers, each hiding the next, all fixed. Four are the same disease:
+Fifteen blockers, each hiding the next, all fixed. Four are the same disease:
 an edge userspace that assumes a kernel much newer than this vendor 4.19.
 
 ### 1. The display driver rejects its own buffers
@@ -312,6 +312,76 @@ driver. Until then, `echo 4 > /sys/class/graphics/fb0/blank` followed by
 `echo 0` wakes it by hand; the `4` matters, because without a suspend first the
 resume is skipped as `Touch is already resume`.
 
+### 12. The interface lags, and the panel lies about its refresh rate
+
+Everything renders on the CPU (see *Session environment*), so each copy the
+compositor makes counts. `phoc` sat at one full core. At the automatic scale of
+2.67 clients render at 3 and phoc downscales every window on every frame, on a
+single thread. Device `r13` ships `/etc/phosh/phoc.ini` with `scale = 3` for
+`DSI-1`, so buffers arrive at their final size and phoc only copies them. The
+file is read by both the Phosh session and the phrog greeter.
+
+A fractional scale set later in Settings brought the lag back and hung the
+interface until a reboot. Device `r14` hides the Display panel: a
+`Hidden=true` desktop entry under `/usr/share/xiaomi-thunder`, which
+`phosh-session-thunder` puts first in `XDG_DATA_DIRS`. The file that
+gnome-control-center ships stays untouched.
+
+The panel driver also declared mode clocks that do not match
+`htotal * vtotal * vrefresh`: the 60 Hz mode worked out to about 49 Hz, so
+compositors paced frames against the wrong rate. Timing vblanks with
+`DRM_IOCTL_WAIT_VBLANK` gives 60.5 Hz. `fix-panel-mode-clock-refresh.patch`
+(kernel `r29`) sets each clock from the mode's own timings. The DSI link takes
+its rate from a separate field, so only the advertised rate changes.
+
+This makes the interface usable, but it is not 60 fps: that needs the GPU.
+
+### 13. The power menu does nothing
+
+Power off and Restart in the Phosh menu did nothing, and every polkit check
+failed with `Process not found`. polkit 127 identifies a subject by its pidfd,
+reading the `Pid:` line of `/proc/self/fdinfo/<fd>`. On this kernel fdinfo is
+mode 0400, and `polkitd` drops privileges without an `exec`, which leaves the
+process non-dumpable. The read fails with `EACCES`, which `strace` shows
+directly. Upstream 5.14 changed this (`7bc3fa0172a4`, `1927e498aee1`):
+fdinfo access is checked against ptrace read access instead of the file mode.
+`backport-procfs-fdinfo-ptrace-read.patch` (kernel `r30`) backports that change.
+`pkcheck --action-id org.freedesktop.login1.power-off` now authorizes the
+greeter's phoc.
+
+### 14. The battery never reaches 100%
+
+With the gauge algorithm in the kernel (blocker 9), the level stopped at 99%
+on the charger. The charger does fire its charge-full event (`battery full!`),
+but the in-kernel algorithm has no handler for `FG_INTR_CHR_FULL`. It only
+raises the displayed level on coulomb counter steps, and a full battery draws
+too little current to take the last one. Android's `fuelgauged` handles the
+event; the in-kernel copy never had to, because it only ran in recovery.
+
+`fix-mtk-gauge-charge-full-uisoc.patch` (kernel `r31`) reports 100% on charge
+full while the charger is present. The counter-based level is left as it is.
+On discharge, `fgr_bat_int2_l_handler()` already scales its steps by
+`ui_soc / soc`, so the two levels converge again.
+
+### 15. An automatic update breaks the greeter
+
+Once polkit worked (blocker 13), GNOME Software could run
+`apk-polkit-rs`, and it applied an automatic update. glib and bubblewrap are
+rebuilt for this kernel (blockers 4 and 5) and exist in no repository. apk
+"downgraded" them to the Alpine builds. With the Alpine glib,
+`waitid(P_PIDFD)` fails with `EINVAL` again. The on-screen keyboard dies at
+start, and gnome-session gives up on the greeter:
+
+    Unrecoverable failure in required component sm.puri.OSK0.desktop
+
+All that is left on screen is a spinner. The greeter's stderr goes to `tty7`,
+and `/dev/vcs7` is the quickest way to read it.
+
+Device `r15` depends on `glib>=2.90.0-r2` and `bubblewrap>=0.13.0-r1`, so the
+solver can no longer swap them. It also ships a dconf default,
+`org.gnome.software download-updates=false`, that stops GNOME Software from
+updating by itself. Manual updates still work.
+
 ## Session environment
 
 Both the greeter and the user session need the same environment, and neither
@@ -339,17 +409,20 @@ gets it by default. See `device-scripts/phrog-session-pixman` and
 
 ## Still open
 
-**The polkit agent cannot register.** phosh reports
+**The polkit agent.** phosh used to report
 
     Auth agent failed to register: Cannot determine session the caller is in
 
-even though the session is now `Type=wayland` / `Class=user` / `Seat=seat0`,
-phosh runs in cgroup `/c16` matching its own `XDG_SESSION_ID`, and `polkitd` is
-linked against `libelogind`. Restarting `polkitd` with a live session present
-changes nothing. elogind keeps its session files in `/run/systemd/sessions`,
-which `libelogind` does look for, but places the session cgroups at the cgroup2
-root rather than under `/sys/fs/cgroup/elogind/`. Unresolved.
+with the session correctly registered in elogind. It is most likely the same
+fdinfo `EACCES` as blocker 13: polkitd could not resolve the calling process at
+all. After kernel `r30` the power menu has still to be tested from a live
+session, which will also show whether the agent now registers.
 
+**GPU acceleration.** The Mali-G57 runs only under the vendor's kbase driver
+(`/dev/mali0`), with no free userspace for it on this kernel.
+
+**Brightness.** There is no `/sys/class/backlight` device, so Phosh has no
+brightness slider.
 
 ## Unrelated kernel bug found on the way
 

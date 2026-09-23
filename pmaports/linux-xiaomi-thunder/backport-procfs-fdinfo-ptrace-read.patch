@@ -1,0 +1,97 @@
+--- a/fs/proc/fd.c
++++ b/fs/proc/fd.c
+@@ -9,6 +9,7 @@
+ #include <linux/security.h>
+ #include <linux/file.h>
+ #include <linux/seq_file.h>
++#include <linux/ptrace.h>
+ #include <linux/fs.h>
+ 
+ #include <linux/proc_fs.h>
+@@ -69,8 +70,35 @@
+ 	return 0;
+ }
+ 
++/*
++ * Backport of 7bc3fa0172a4 ("procfs: allow reading fdinfo with
++ * PTRACE_MODE_READ") and 1927e498aee1 ("procfs: prevent unprivileged
++ * processes accessing fdinfo dir") from 5.14. Without them a process that
++ * dropped privileges without exec() becomes non-dumpable, its /proc files
++ * turn root-owned, and it can no longer read its own fdinfo. polkit >= 124
++ * resolves every subject through a pidfd and reads its PID from
++ * /proc/self/fdinfo, so polkitd saw every caller as PID 0 ("Process not
++ * found") and nothing needing authorization worked, power-off included.
++ */
++static bool proc_fdinfo_access_allowed(struct inode *inode)
++{
++	bool allowed = false;
++	struct task_struct *task = get_proc_task(inode);
++
++	if (!task)
++		return false;
++
++	allowed = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS);
++	put_task_struct(task);
++
++	return allowed;
++}
++
+ static int seq_fdinfo_open(struct inode *inode, struct file *file)
+ {
++	if (!proc_fdinfo_access_allowed(inode))
++		return -EACCES;
++
+ 	return single_open(file, seq_show, inode);
+ }
+ 
+@@ -325,7 +353,7 @@
+ 	struct proc_inode *ei;
+ 	struct inode *inode;
+ 
+-	inode = proc_pid_make_inode(dentry->d_sb, task, S_IFREG | S_IRUSR);
++	inode = proc_pid_make_inode(dentry->d_sb, task, S_IFREG | S_IRUGO);
+ 	if (!inode)
+ 		return ERR_PTR(-ENOENT);
+ 
+@@ -351,8 +379,21 @@
+ 				  proc_fdinfo_instantiate);
+ }
+ 
++/*
++ * proc_fdinfo_permission - check permission for the /proc/<pid>/fdinfo
++ * directory itself
++ */
++static int proc_fdinfo_permission(struct inode *inode, int mask)
++{
++	if ((mask & MAY_READ) && !proc_fdinfo_access_allowed(inode))
++		return -EACCES;
++
++	return generic_permission(inode, mask);
++}
++
+ const struct inode_operations proc_fdinfo_inode_operations = {
+ 	.lookup		= proc_lookupfdinfo,
++	.permission	= proc_fdinfo_permission,
+ 	.setattr	= proc_setattr,
+ };
+ 
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -2970,7 +2970,7 @@
+ 	DIR("task",       S_IRUGO|S_IXUGO, proc_task_inode_operations, proc_task_operations),
+ 	DIR("fd",         S_IRUSR|S_IXUSR, proc_fd_inode_operations, proc_fd_operations),
+ 	DIR("map_files",  S_IRUSR|S_IXUSR, proc_map_files_inode_operations, proc_map_files_operations),
+-	DIR("fdinfo",     S_IRUSR|S_IXUSR, proc_fdinfo_inode_operations, proc_fdinfo_operations),
++	DIR("fdinfo",     S_IRUGO|S_IXUGO, proc_fdinfo_inode_operations, proc_fdinfo_operations),
+ 	DIR("ns",	  S_IRUSR|S_IXUGO, proc_ns_dir_inode_operations, proc_ns_dir_operations),
+ #ifdef CONFIG_NET
+ 	DIR("net",        S_IRUGO|S_IXUGO, proc_net_inode_operations, proc_net_operations),
+@@ -3369,7 +3369,7 @@
+  */
+ static const struct pid_entry tid_base_stuff[] = {
+ 	DIR("fd",        S_IRUSR|S_IXUSR, proc_fd_inode_operations, proc_fd_operations),
+-	DIR("fdinfo",    S_IRUSR|S_IXUSR, proc_fdinfo_inode_operations, proc_fdinfo_operations),
++	DIR("fdinfo",    S_IRUGO|S_IXUGO, proc_fdinfo_inode_operations, proc_fdinfo_operations),
+ 	DIR("ns",	 S_IRUSR|S_IXUGO, proc_ns_dir_inode_operations, proc_ns_dir_operations),
+ #ifdef CONFIG_NET
+ 	DIR("net",        S_IRUGO|S_IXUGO, proc_net_inode_operations, proc_net_operations),

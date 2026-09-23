@@ -12,6 +12,9 @@ export WLR_BACKENDS=drm,libinput
 export GSK_RENDERER=cairo
 export GDK_BACKEND=wayland
 export LIBGL_ALWAYS_SOFTWARE=1
+# Dados do aparelho na frente: esconde o painel Tela do Configuracoes para a
+# escala ficar fixa em 3 (ver /usr/share/xiaomi-thunder/applications).
+export XDG_DATA_DIRS="/usr/share/xiaomi-thunder:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 # Espera o phoc do greeter soltar o seat0, senao o seatd fecha a conexao nova.
 sleep 3
 exec /usr/bin/phosh-session "$@"
