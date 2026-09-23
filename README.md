@@ -29,7 +29,7 @@ The device page on the official wiki is
 | Audio (speaker) | works | headphone path written but untested |
 | USB networking | works | RNDIS, the usual pmOS `172.16.42.1` |
 | Battery | **works** | charges, and since kernel `r26` the fuel gauge reports a level: it counts down unplugged and survives a reboot. The Gauge Master 3.0 algorithm runs in the kernel instead of Android's `fuelgauged` — see [phosh-greeter.md](docs/phosh-greeter.md), blocker 9 |
-| Phosh | **works** | the device boots into the greeter, the session reaches `RUNNING`, blanks and unblanks with the power button and stays up. Software rendering only — see [phosh-greeter.md](docs/phosh-greeter.md) |
+| Phosh | **works** | the device boots into the greeter and the session stays up. The screen blanks and locks on idle or with the power button, with the backlight off, and the touchscreen works again on wake. Software rendering only, and no brightness control yet — see [phosh-greeter.md](docs/phosh-greeter.md) |
 | Bluetooth | **works** | brought up at boot by an OpenRC service. Scanning and pairing verified against a Linux host, BR/EDR and LE, coexisting with Wi-Fi. Factory address read from `nvdata` at run time. **Audio does not play** — A2DP negotiates and the link carries the stream, but the device has no audio session to consume it; see [bluetooth-bringup.md](docs/bluetooth-bringup.md#audio-negotiates-but-nothing-plays) |
 | Modem | not started | |
 | Cameras | not started | |

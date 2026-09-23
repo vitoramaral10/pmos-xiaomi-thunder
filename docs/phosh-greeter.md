@@ -10,7 +10,7 @@ stays installed as a fallback, out of the boot sequence:
 
 ## What had to be fixed
 
-Nine blockers, each hiding the next, all fixed. Four are the same disease:
+Eleven blockers, each hiding the next, all fixed. Four are the same disease:
 an edge userspace that assumes a kernel much newer than this vendor 4.19.
 
 ### 1. The display driver rejects its own buffers
@@ -190,14 +190,11 @@ the layer off outside `USER_SCEN_BLANK` too. Measured on `r24`: with no
 compositor, DPMS off for 45 s and back on survives, and inside the Phosh
 session the power button blanks and unblanks the panel cleanly.
 
-Idle blanking is still off as a dconf system default, from before the fix:
-
-    [org/gnome/desktop/session]      idle-delay=uint32 0
-    [org/gnome/desktop/screensaver]  idle-activation-enabled=false
-                                     lock-enabled=false
-
-Idle blanking goes through the same commit as the power button, so this
-default can go once idle blanking has been tested on its own.
+Until device `r12` idle blanking and the lock were off as a dconf system
+default, from before the fix. With blockers 10 and 11 fixed too, `r12` drops
+it, so the screen blanks and locks by GNOME's defaults (5 minutes idle, then
+lock). Tested with a 30-second idle delay and with the power button: the
+screen goes dark, locks, and the touchscreen takes the password on wake.
 
 ### 9. UPower powers the phone off, because the battery reads 0%
 
@@ -276,6 +273,44 @@ A side note on the load average stuck at 15: `khungtaskd` names
 `mdrt_thread`, `mivr_thread`, `gauge_timer_thr` and the `wdtk-*` watchdog
 kickers. Those are vendor kthreads that sleep in state D by design, and
 they account for the load. It is not a hang.
+
+### 10. The screen goes black but the backlight stays on
+
+With blanking working, the panel powered down and the backlight stayed lit
+over it. The panel driver never touches the backlight: on Android the lights
+HAL writes 0 to `lcd-backlight` when the screen goes off. The driver does try a
+`pwm` GPIO on unprepare, but no device tree defines `pwm-gpios`, not even
+Xiaomi's overlay, which is the `gpiod_set_value: invalid GPIO` warning on every
+blank.
+
+The backlight is only an LED class device, `/sys/class/leds/lcd-backlight`
+(0 to 2047), and writing to it does reach the KTD3137 backlight chip. The panel
+already announces its own power state on the vendor's DRM blank notifier chain
+(`DRM_BLANK_POWERDOWN` / `DRM_BLANK_UNBLANK`), which the touchscreen was meant to
+use. Fixed by `fix-mtk-backlight-follow-panel-blank.patch` (kernel `r27`): the
+LED driver follows that chain, turns the chip off on blank, restores the level
+on unblank, and holds any level written while blanked until the panel is back.
+
+There is still no `/sys/class/backlight` device, so Phosh has no brightness
+slider.
+
+### 11. The touchscreen is dead after the first blank
+
+The NT36672C touch controller is part of the display, so it resets with the
+panel and needs `nvt_ts_resume()` once the panel is back. Its driver only
+listens for framebuffer blank events, which no DRM compositor emits. The
+`touchscreen-thunder-wake` service fires one at boot, and after the first blank
+nothing ever did again. This was true from kernel `r24` on; nobody had touched
+the screen after waking it.
+
+Fixed by `fix-nvt-touch-follow-panel-blank.patch` (kernel `r28`): the touch
+driver follows the same DRM blank chain as the backlight. On blank it suspends
+the controller; on unblank it resumes it and reloads its firmware (about
+120 ms). The burst of checksum errors that used to follow every blank is gone,
+since the controller is now put to sleep instead of losing power under the
+driver. Until then, `echo 4 > /sys/class/graphics/fb0/blank` followed by
+`echo 0` wakes it by hand; the `4` matters, because without a suspend first the
+resume is skipped as `Touch is already resume`.
 
 ## Session environment
 

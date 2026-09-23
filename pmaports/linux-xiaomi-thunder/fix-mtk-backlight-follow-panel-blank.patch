@@ -1,0 +1,90 @@
+--- a/drivers/misc/mediatek/leds/leds-mtk-disp.c
++++ b/drivers/misc/mediatek/leds/leds-mtk-disp.c
+@@ -17,6 +17,7 @@
+ #include <linux/workqueue.h>
+ 
+ #include "leds-mtk-disp.h"
++#include <drm/drm_notifier_odm.h>
+ 
+ #ifdef CONFIG_LM3697_SUPPORT
+ #include <linux/mfd/ti-lmu-backlight.h>
+@@ -79,6 +80,17 @@
+ 
+ static DEFINE_MUTEX(leds_mutex);
+ struct leds_desp_info *leds_info;
++
++/*
++ * The panel driver blanks the display but never touches the backlight: on
++ * Android the lights HAL writes 0 to lcd-backlight when the screen goes off.
++ * Without that HAL the backlight stays lit over a black panel. Follow the
++ * panel's own blank notifications instead, the way mainline panel drivers
++ * tie their backlight to the panel.
++ */
++static struct mtk_led_data *panel_bl;
++static bool panel_blanked;
++static int panel_bl_level;
+ static BLOCKING_NOTIFIER_HEAD(mtk_leds_chain_head);
+ 
+ int mtk_leds_register_notifier(struct notifier_block *nb)
+@@ -177,6 +189,11 @@
+ 	char *bkl_ptr = (char *)strnstr(saved_command_line, ":bklic=", strlen(saved_command_line));
+ #endif
+ 	brightness = min(brightness, s_led->conf.max_level);
++	if (s_led == panel_bl && READ_ONCE(panel_blanked)) {
++		/* keep the backlight off; apply this level on unblank */
++		panel_bl_level = brightness;
++		return 0;
++	}
+ 	if (brightness == s_led->conf.level)
+ 		return 0;
+ 
+@@ -424,6 +441,34 @@
+ }
+ 
+ 
++static int mtk_leds_panel_blank(struct notifier_block *nb,
++	unsigned long event, void *data)
++{
++	struct drm_notifier_data *evdata = data;
++	int blank;
++
++	if (event != DRM_EVENT_BLANK || !evdata || !evdata->data || !panel_bl)
++		return NOTIFY_DONE;
++	blank = *(int *)evdata->data;
++
++	mutex_lock(&leds_mutex);
++	if (blank == DRM_BLANK_POWERDOWN && !panel_blanked) {
++		panel_bl_level = panel_bl->conf.level;
++		led_level_disp_set(panel_bl, 0);
++		WRITE_ONCE(panel_blanked, true);
++	} else if (blank == DRM_BLANK_UNBLANK && panel_blanked) {
++		WRITE_ONCE(panel_blanked, false);
++		led_level_disp_set(panel_bl, panel_bl_level);
++	}
++	mutex_unlock(&leds_mutex);
++
++	return NOTIFY_OK;
++}
++
++static struct notifier_block mtk_leds_panel_nb = {
++	.notifier_call = mtk_leds_panel_blank,
++};
++
+ /****************************************************************************
+  * driver functions
+  ***************************************************************************/
+@@ -463,6 +508,14 @@
+ 	platform_set_drvdata(pdev, m_leds);
+ 	m_leds->dev = dev;
+ 
++	nums = getLedDespIndex("lcd-backlight");
++	if (nums >= 0) {
++		panel_bl = container_of(leds_info->leds[nums],
++			struct mtk_led_data, desp);
++		if (drm_register_client(&mtk_leds_panel_nb))
++			pr_notice("cannot follow panel blank events\n");
++	}
++
+ 	pr_info("probe end ---");
+ 
+ 	return ret;
