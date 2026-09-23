@@ -105,44 +105,16 @@ if [ -f /etc/pam.d/greetd ] && ! grep -q 'pam_env.so.*greetd/environment' /etc/p
 		/etc/pam.d/greetd
 fi
 
-# 10) Desliga o apagamento de tela por ociosidade.
-#     Sem isto o aparelho reseta cerca de 50 s depois que a sessao fica
-#     parada. A cadeia, capturada com o log do compositor e o do kernel
-#     transmitidos juntos pela rede:
-#       phosh-main: Phosh ready after 1.74s                    (t+0 s)
-#       phoc-wlroots: connector DSI-1: Failed to disable CRTC 64 (t+51 s)
-#       mtk_plane_atomic_disable, empty crtc state              (t+51 s)
-#       mtk_iommu_isr <<TRANSLATION FAULT>> port=L1_OVL_2L_RDMA0
-#         iova=0xfd2d6000 pa=0x0   (o mesmo dma_addr do GEM criado pelo phoc)
-#       ... faults sem parar ate o watchdog resetar
-#     Ou seja: o phosh manda o commit de blanking, neste driver desligar um
-#     plano e' no-op para um compositor DRM comum (o desligamento real mora no
-#     caminho do layer blob, que so' o compositor de hardware do Android
-#     percorre), o desligamento do CRTC falha, e o overlay segue varrendo um
-#     buffer cujo mapeamento de IOMMU ja foi desfeito.
-#     ATENCAO: isto NAO deixa o aparelho estavel. Tira do caminho um matador
-#     deterministico (o blanking automatico), e so'. O botao de travar apaga a
-#     tela pelo mesmo caminho e ainda derruba, e existe um segundo modo de
-#     falha, mudo, que continua acontecendo. Ver docs/phosh-greeter.md,
-#     bloqueio 8. KMS legado nao salva: WLR_DRM_NO_ATOMIC=1 e' lido por este
-#     phoc (a string esta no binario) e o desligamento falha igual.
-#     Vai como padrao de sistema do dconf para valer tambem para o greetd.
-#     Custo: a tela nunca apaga sozinha. Some quando o driver souber desligar
-#     um plano de verdade.
-if command -v dconf >/dev/null 2>&1; then
-	mkdir -p /etc/dconf/profile /etc/dconf/db/local.d
-	if ! [ -f /etc/dconf/profile/user ]; then
-		printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
-	fi
-	cat > /etc/dconf/db/local.d/00-xiaomi-thunder-no-blank <<'DCONF'
-[org/gnome/desktop/session]
-idle-delay=uint32 0
-
-[org/gnome/desktop/screensaver]
-idle-activation-enabled=false
-lock-enabled=false
-DCONF
-	dconf update || true
+# 10) O apagamento de tela e o bloqueio seguem os padroes do GNOME.
+#     Ate o device r11 este passo desligava o apagamento por ociosidade e o
+#     bloqueio (dconf de sistema), porque apagar a tela derrubava o aparelho:
+#     o driver nao desligava o plano de verdade e o overlay seguia lendo um
+#     buffer ja liberado. O kernel r24 corrigiu isso, o r27 apaga a luz de
+#     fundo junto com o painel e o r28 religa o touch quando o painel volta.
+#     Em atualizacao, tira o arquivo que as versoes anteriores deixaram.
+if [ -f /etc/dconf/db/local.d/00-xiaomi-thunder-no-blank ]; then
+	rm -f /etc/dconf/db/local.d/00-xiaomi-thunder-no-blank
+	command -v dconf >/dev/null 2>&1 && dconf update || true
 fi
 
 # 11) O seatd sobe no runlevel boot, antes do greetd.
