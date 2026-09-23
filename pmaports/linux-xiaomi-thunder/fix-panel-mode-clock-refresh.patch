@@ -1,0 +1,36 @@
+--- a/drivers/gpu/drm/panel/panel-nt36672c-tianma-fhdp-dsi-vdo-90hz-l19.c
++++ b/drivers/gpu/drm/panel/panel-nt36672c-tianma-fhdp-dsi-vdo-90hz-l19.c
+@@ -656,8 +656,14 @@
+ #define VAC (2408)
+ #define HAC (1080)
+ /*L19 code for L19-70 by caogaojie at 2021/12/31 end*/
++/*
++ * .clock has to match htotal * vtotal * vrefresh: userspace derives the
++ * refresh rate from it, and with the vendor value (251634) this 60 Hz mode
++ * was advertised as 48.96 Hz and the 90 Hz one as 73.13 Hz. The DSI link is
++ * programmed from pll_clk/data_rate in the panel params, not from this field.
++ */
+ static const struct drm_display_mode default_mode = {
+-	.clock = 251634,
++	.clock = 308356,	/* 1386 * 3708 * 60 */
+ 	.hdisplay = HAC,
+ 	.hsync_start = HAC + HFP,
+ 	.hsync_end = HAC + HFP + HSA,
+@@ -674,7 +680,7 @@
+ };
+ 
+ static const struct drm_display_mode performance_mode = {
+-	.clock = 251567,
++	.clock = 309602,	/* 1386 * 2482 * 90 */
+ 	.hdisplay = HAC,
+ 	.hsync_start = HAC + HFP,
+ 	.hsync_end = HAC + HFP + HSA,
+@@ -692,7 +698,7 @@
+ 
+ /*L19 code for HQ-173138 by caogaojie at 2021/12/21 start*/
+ static const struct drm_display_mode refresh_30_mode = {
+-	.clock = 254747,
++	.clock = 311331,	/* 1386 * 7488 * 30 */
+ 	.hdisplay = HAC,
+ 	.hsync_start = HAC + HFP,
+ 	.hsync_end = HAC + HFP + HSA,
