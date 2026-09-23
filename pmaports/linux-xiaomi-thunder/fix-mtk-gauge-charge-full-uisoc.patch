@@ -1,0 +1,52 @@
+--- a/drivers/power/supply/mediatek/battery/mtk_battery_recovery.c
++++ b/drivers/power/supply/mediatek/battery/mtk_battery_recovery.c
+@@ -157,6 +157,10 @@
+ 		fgr_vbat2_l_int_handler();
+ 		fg_int_end_flow(FG_INTR_VBAT2_L);
+ 		break;
++	case FG_INTR_CHR_FULL:
++		fgr_chr_full_handler();
++		fg_int_end_flow(FG_INTR_CHR_FULL);
++		break;
+ 	}
+ 
+ 	bm_err("[%s] intr_num=0x%x\n",
+@@ -427,6 +431,28 @@
+ 		ui_soc, ui_gap_ht, _car, prev_car_bat0, delta_car_bat0);
+ }
+ 
++/*
++ * The charger ended the charge cycle. The UI capacity only rises on
++ * coulomb counter steps of ht_gap, and a full battery draws too little
++ * current to take another step, so it stayed below 100% for good. Do
++ * what the fuelgauged daemon does and report the battery as full; the
++ * coulomb soc is left alone, and fgr_bat_int2_l_handler() already
++ * scales the discharge steps by ui_soc / soc so the two converge.
++ */
++void fgr_chr_full_handler(void)
++{
++	bm_err("[%s] chr:%d ui_soc %d soc %d\n",
++		__func__, get_charger_exist(), ui_soc, soc);
++
++	if (!get_charger_exist() || ui_soc >= 10000)
++		return;
++
++	ui_soc = 10000;
++	prev_car_bat0 = get_fg_hw_car();
++	fg_update_fg_bat_int2_ht();
++	fg_update_fg_bat_int2_lt();
++}
++
+ void fg_time_handler(void)
+ {
+ 	int is_charger_exist = get_charger_exist();
+--- a/drivers/power/supply/mediatek/battery/mtk_battery_recovery.h
++++ b/drivers/power/supply/mediatek/battery/mtk_battery_recovery.h
+@@ -68,6 +68,7 @@
+ void dlpt_sd_handler(void);
+ void fgr_vbat2_h_int_handler(void);
+ void fgr_vbat2_l_int_handler(void);
++void fgr_chr_full_handler(void);
+ 
+ /* construct table */
+ void fg_construct_table_by_temp(bool update, int table_idx);
