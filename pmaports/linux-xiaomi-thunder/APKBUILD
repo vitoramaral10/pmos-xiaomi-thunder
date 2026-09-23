@@ -10,7 +10,7 @@
 maintainer=""
 pkgname=linux-xiaomi-thunder
 pkgver=4.19.191
-pkgrel=27
+pkgrel=28
 _commit=a40ceab8943703f33e935cb0b86d0f69aa2044dd
 # Drop do driver de conectividade MediaTek enxertado em prepare().
 _conndrop=mtk-connectivity-gen4m-mt6833-2
@@ -50,6 +50,7 @@ source="
 	fix-mtk-ipv6-optr-sysctl-netns-leak.patch
 	fix-mtk-gauge-kernel-algo.patch
 	fix-mtk-backlight-follow-panel-blank.patch
+	fix-nvt-touch-follow-panel-blank.patch
 	"
 builddir="$srcdir/Xiaomi_Kernel_OpenSource-$_commit"
 options="
@@ -198,4 +199,5 @@ ac7416fd499bfe96702c5766018289ab710e68812d9e4c6e311a0015ac426f9f70b5dc4bf9693dc2
 c53dbcbf7ed884dac7b4eb742e38cd90309940bbf8ce19b63bb9bbfe29f370ff427d61f2065adaaf408539d20e201023ab45a8035ebe06f1f72df6a8017d3621  fix-mtk-ipv6-optr-sysctl-netns-leak.patch
 aac1806d2d61c6aed9e935f664e08c134b7f6577f70b7ad358f22e0eeabed8801f3fd02bfd58f0110d44b07b3919f35896c8876d4347b5803d5513fa68774c8a  fix-mtk-gauge-kernel-algo.patch
 e1062af8ef21934a5eeee60f3b953aeda6272a5eb7c09f7b26ac055405929481d89df9949ef8d2f5d77062f65e0af3f9cb7d3ad2fea676ff2b01ccf1c0bfc02f  fix-mtk-backlight-follow-panel-blank.patch
+1a6677e1945e08368247c58b4aa0a56f17e62f900da6ea61006b5778bfde8bb84a97782e624b7e1375a4a336d15221b09bbf8f368513af6a64ebe965b1fbfbd7  fix-nvt-touch-follow-panel-blank.patch
 "

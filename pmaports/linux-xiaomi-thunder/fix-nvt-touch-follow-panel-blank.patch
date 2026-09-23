@@ -1,0 +1,89 @@
+--- a/drivers/input/touchscreen/mediatek/NT36672C/nt36xxx.c
++++ b/drivers/input/touchscreen/mediatek/NT36672C/nt36xxx.c
+@@ -36,6 +36,7 @@
+ #endif
+ #include <linux/notifier.h>
+ #include <linux/fb.h>
++#include <drm/drm_notifier_odm.h>
+ #elif defined(CONFIG_HAS_EARLYSUSPEND)
+ #include <linux/earlysuspend.h>
+ #endif
+@@ -84,6 +85,7 @@
+ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+ #else
+ static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
++static struct notifier_block nvt_panel_nb;
+ #endif
+ #elif defined(CONFIG_HAS_EARLYSUSPEND)
+ static void nvt_ts_early_suspend(struct early_suspend *h);
+@@ -1879,6 +1881,8 @@
+ 		NVT_ERR("register fb_notifier failed. ret=%d\n", ret);
+ 		goto err_register_fb_notif_failed;
+ 	}
++	if (drm_register_client(&nvt_panel_nb))
++		NVT_ERR("cannot follow panel blank events\n");
+ #endif
+ #elif defined(CONFIG_HAS_EARLYSUSPEND)
+ 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
+@@ -1906,6 +1910,7 @@
+ 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+ err_register_drm_notif_failed:
+ #else
++	drm_unregister_client(&nvt_panel_nb);
+ 	if (fb_unregister_client(&ts->fb_notif))
+ 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
+ err_register_fb_notif_failed:
+@@ -2006,6 +2011,7 @@
+ 	if (msm_drm_unregister_client(&ts->drm_notif))
+ 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+ #else
++	drm_unregister_client(&nvt_panel_nb);
+ 	if (fb_unregister_client(&ts->fb_notif))
+ 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
+ #endif
+@@ -2069,6 +2075,7 @@
+ 	if (msm_drm_unregister_client(&ts->drm_notif))
+ 		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
+ #else
++	drm_unregister_client(&nvt_panel_nb);
+ 	if (fb_unregister_client(&ts->fb_notif))
+ 		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
+ #endif
+@@ -2417,6 +2424,37 @@
+ 	}
+ 	return 0;
+ }
++
++/*
++ * The touch IC is part of the display (TDDI): powering the panel down resets
++ * it, and it needs nvt_ts_resume() once the panel is back. On Android an FB
++ * blank event reaches the callback above; a plain DRM compositor never emits
++ * one, so after the first blank the touchscreen stayed dead. Follow the
++ * panel's own blank notifications as well. suspend and resume both return
++ * early when the IC is already in that state, so a duplicate is harmless.
++ */
++static int nvt_panel_blank_callback(struct notifier_block *self,
++	unsigned long event, void *data)
++{
++	struct drm_notifier_data *evdata = data;
++	int blank;
++
++	if (event != DRM_EVENT_BLANK || !evdata || !evdata->data || !ts)
++		return 0;
++	blank = *(int *)evdata->data;
++	if (blank == DRM_BLANK_POWERDOWN) {
++		NVT_LOG("panel blank\n");
++		nvt_ts_suspend(&ts->client->dev);
++	} else if (blank == DRM_BLANK_UNBLANK) {
++		NVT_LOG("panel unblank\n");
++		nvt_ts_resume(&ts->client->dev);
++	}
++	return 0;
++}
++
++static struct notifier_block nvt_panel_nb = {
++	.notifier_call = nvt_panel_blank_callback,
++};
+ #endif
+ #elif defined(CONFIG_HAS_EARLYSUSPEND)
+ /*******************************************************
