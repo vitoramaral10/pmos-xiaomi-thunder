@@ -347,7 +347,7 @@ directly. Upstream 5.14 changed this (`7bc3fa0172a4`, `1927e498aee1`):
 fdinfo access is checked against ptrace read access instead of the file mode.
 `backport-procfs-fdinfo-ptrace-read.patch` (kernel `r30`) backports that change.
 `pkcheck --action-id org.freedesktop.login1.power-off` now authorizes the
-greeter's phoc.
+greeter's phoc, and Power off and Restart work from the Phosh menu.
 
 ### 14. The battery never reaches 100%
 
@@ -415,8 +415,8 @@ gets it by default. See `device-scripts/phrog-session-pixman` and
 
 with the session correctly registered in elogind. It is most likely the same
 fdinfo `EACCES` as blocker 13: polkitd could not resolve the calling process at
-all. After kernel `r30` the power menu has still to be tested from a live
-session, which will also show whether the agent now registers.
+all. Since kernel `r30` the power menu works; whether the agent now registers
+has still to be checked in a live session.
 
 **GPU acceleration.** The Mali-G57 runs only under the vendor's kbase driver
 (`/dev/mali0`), with no free userspace for it on this kernel.
