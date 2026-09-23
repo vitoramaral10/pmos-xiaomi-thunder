@@ -60,8 +60,8 @@
 '''Bluetooth''' work, and the device boots into Phosh, associates to a network
 and brings its Bluetooth controller up on its own.
 
-Not working: modem, cameras and GPU acceleration (the compositor
-runs on the pixman software renderer). The battery charges and, since kernel
+Not working: modem, cameras, brightness control and GPU acceleration (the
+compositor runs on the pixman software renderer). The battery charges and, since kernel
 r26, the fuel gauge reports a level. SSH works over Wi-Fi but stalls over the
 USB link (see [[#Known issues]]).
 
@@ -105,10 +105,11 @@ shipped in the <code>light-u-oss</code> tarball hardcodes
 <code>MTK_COMBO_CHIP=CONNAC</code> and <code>WLAN_CHIP_ID=6765</code>, both
 wrong for this SoC.
 
-=== Required patches ===
-Four fixes were needed beyond the usual downstream kernel cleanups (GCC
-compatibility, SELinux host includes, prebuilt cpio replacement, VLA
-initializers in the audio amplifier drivers).
+=== Patches needed to boot ===
+Four fixes were needed just to boot, beyond the usual downstream kernel
+cleanups (GCC compatibility, SELinux host includes, prebuilt cpio replacement,
+VLA initializers in the audio amplifier drivers). The patches the Phosh session
+needed on top of these are in the next section.
 
 ==== 1. Device tree: use the SoC base DTS, not the device overlay ====
 <code>light.dts</code> is a <code>/plugin/</code> overlay and is '''not''' a
@@ -202,8 +203,43 @@ always fails.
 Guard both the NULL ION client and the returned handle, and normalise NULL into
 an error pointer (the caller only tests <code>IS_ERR</code>).
 
-This stops the panic: the PRIME import now fails cleanly instead of killing the
-kernel, and the compositor falls back to the pixman software renderer.
+This stops the panic, but only turns it into a clean failure: the import still
+rejects every buffer ION did not allocate, which is every buffer a Wayland
+compositor imports. The follow-up is the first patch in the next section.
+
+=== Patches for the Wayland session ===
+Nine more patches, found one at a time while bringing Phosh up. Most have the
+same root: the vendor drivers expect Android's userspace (the hardware
+composer, the lights HAL, <code>fuelgauged</code>) to do part of their job, and
+nothing on postmarketOS does it. The full write-up, with logs and measurements,
+is <code>docs/phosh-greeter.md</code> in the port repository.
+
+; <code>fix-mtk-gem-prime-import-fallback.patch</code>
+: <code>mtk_gem_prime_import()</code> only accepts DMA-BUFs that ION can import and returns <code>-EINVAL</code> for anything else, while the driver still advertises <code>DRM_CAP_PRIME</code> import support. wlroots allocates a dumb buffer, exports it and re-imports it through PRIME on a '''second''' file descriptor before scan-out, so phoc could never bring the display up. (On the same descriptor the re-import succeeds, because it only hits the per-file PRIME handle cache — which is why a naive test passes.) The fix falls through to the generic import. Swapchain test failures went from 2012 to 0.
+
+; <code>fix-mtk-plane-disable-without-layer-blob.patch</code>
+: On this driver, '''disabling a plane from a plain DRM atomic compositor is a no-op''': <code>mtk_plane_atomic_disable()</code> only pushes the update when a private CRTC pointer is set, and that only happens when userspace sets MediaTek's layer-blob property, which only the Android hardware composer does. The overlay keeps scanning out the last buffer after the compositor frees it, the IOMMU floods with translation faults, and the device dies somewhere between 50 seconds and 5 minutes into a session. Legacy KMS (<code>WLR_DRM_NO_ATOMIC=1</code>) fails identically. The fix falls back to the CRTC the plane was on.
+
+; <code>fix-mtk-gauge-kernel-algo.patch</code>
+: MediaTek's Gauge Master 3.0 computes the state of charge in Android's <code>fuelgauged</code> daemon. Without it the gauge reports <code>capacity=-1</code>, UPower reads that as 0%, and '''powers the phone off''' 8 to 60 seconds into a session, as soon as it draws more than the USB port supplies. It looks exactly like a hang: the log stops mid-stream and pstore is stale, because it is a clean power-off. The driver carries a complete in-kernel copy of the algorithm that it only runs in recovery; the patch adds <code>CONFIG_MTK_GAUGE_KERNEL_ALGO</code> to run it always.
+
+; <code>fix-mtk-gauge-charge-full-uisoc.patch</code>
+: The in-kernel algorithm has no handler for the charge-full event, so the level stopped at 99% on the charger. Reports 100% on charge full while the charger is present.
+
+; <code>fix-mtk-backlight-follow-panel-blank.patch</code>
+: The panel driver never touches the backlight — on Android the lights HAL does — so the screen went black with the backlight still lit. The LED driver now follows the vendor DRM blank notifier chain.
+
+; <code>fix-nvt-touch-follow-panel-blank.patch</code>
+: The NT36672C touch controller resets with the panel, and its driver only listens for framebuffer blank events, which no DRM compositor emits. The touchscreen was dead after the first blank. It now follows the same DRM blank chain.
+
+; <code>fix-panel-mode-clock-refresh.patch</code>
+: The panel's mode clocks did not match <code>htotal × vtotal × vrefresh</code>: the 60 Hz mode worked out to about 49 Hz, so compositors paced frames against the wrong rate. Measured with <code>DRM_IOCTL_WAIT_VBLANK</code>, the panel runs at 60.5 Hz.
+
+; <code>backport-procfs-fdinfo-ptrace-read.patch</code>
+: polkit 127 identifies a caller by reading its pidfd's <code>/proc/self/fdinfo</code> entry. On 4.19 fdinfo is mode 0400, and <code>polkitd</code> drops privileges without an <code>exec</code>, so the read fails with <code>EACCES</code> and every check fails with <code>Process not found</code> — Power off and Restart in the Phosh menu did nothing. Backports the 5.14 change that checks ptrace read access instead (<code>7bc3fa0172a4</code>, <code>1927e498aee1</code>).
+
+; <code>fix-mtk-ipv6-optr-sysctl-netns-leak.patch</code>
+: MediaTek registers <code>net.optr</code> in every network namespace and never removes it, which produces a <code>retire_sysctl_set</code> warning whenever a namespace is torn down. A real leak, and a red herring: it showed up as the last kernel line before the gauge-triggered power-offs only because a sandbox was exiting during shutdown.
 
 == deviceinfo notes ==
 Boot image parameters were taken from the stock boot image: header version 2,
@@ -297,6 +333,44 @@ fails with <code>Failed to find AVB_MAGIC at offset: 0</code>; the image
 generated by avbtool already carries the flag, so plain
 <code>fastboot flash</code> is what works.
 
+== Phosh session ==
+The device boots into the phrog greeter under greetd, and the full Phosh
+session comes up with all of its GNOME components. Weston is still installed as
+a fallback, out of the boot sequence: <code>rc-service weston-thunder start</code>.
+
+=== Userspace that assumes a newer kernel ===
+Three things in current Alpine userspace fail on a vendor 4.19 kernel. Anyone
+running a modern desktop stack on an old downstream kernel will likely meet the
+same ones. The port ships rebuilt <code>glib</code> and <code>bubblewrap</code>.
+
+* '''bubblewrap''' is built with <code>-Dassume_kernel</code> set to the current LTS, which compiles out the fallback for <code>openat2</code> (5.6+). Every bind mount fails with <code>ENOSYS</code>, so nothing sandboxed runs — including glycin, which is how GTK4 loads SVG icons. <code>--debug-opt=force-openat-fallback</code> does not help, because the fallback is not in the binary.
+* '''glib reports every file as missing.''' <code>g_file_query_exists()</code> calls <code>faccessat()</code> with <code>AT_SYMLINK_NOFOLLOW</code>, and before <code>faccessat2()</code> (5.8) the syscall takes no flags, so musl returns <code>EINVAL</code>. This is what killed the greeter first.
+* '''gnome-session never leaves its first phase''' — the endless spinner after login. <code>pidfd_open()</code> and <code>CLONE_PIDFD</code> were backported into the Android 4.19 tree, but <code>waitid(P_PIDFD)</code> (5.4) was not. glib creates the pidfd, sees the child exit, fails to reap it, and reports a wait status of <code>-1</code>, which is neither "exited" nor "died". gnome-session waits forever and the child stays a zombie. The rebuilt glib probes <code>waitid(P_PIDFD)</code> once with <code>WNOWAIT</code> and falls back to the SIGCHLD child watch.
+
+'''Automatic updates undo this.''' GNOME Software once replaced the rebuilt glib
+and bubblewrap with the Alpine builds, which brought the endless spinner back
+on the greeter. The device package now depends on
+<code>glib>=2.90.0-r2</code> and <code>bubblewrap>=0.13.0-r1</code> so apk
+cannot swap them, and turns off GNOME Software's automatic downloads.
+
+=== Session environment ===
+Neither the greeter nor the user session gets a working environment by default:
+
+* <code>LIBSEAT_BACKEND=seatd</code>. With the logind backend the session gets deactivated, phoc releases the display, and disabling the CRTC hangs the panel until the hardware watchdog resets the device.
+* <code>XDG_CURRENT_DESKTOP=Phosh:GNOME</code>. Without it gnome-session never matches <code>OnlyShowIn=GNOME</code> on the shell and spins forever without starting it.
+* <code>XDG_SESSION_TYPE=wayland</code>, set through a <code>pam_env</code> line in <code>/etc/pam.d/greetd</code> ahead of <code>pam_elogind</code>. greetd does not export it, so the session is registered as <code>Type=unspecified</code>.
+* <code>seatd</code> in the <code>boot</code> runlevel. greetd does not declare the dependency; with Weston out of the boot sequence, nothing else started it.
+* The greeter user and the regular user in the <code>seat</code> group, and <code>stevia-schemas</code> installed — without its GSettings schema the on-screen keyboard aborts, and it is a required session component.
+
+=== Performance ===
+Everything renders on the CPU — the Mali-G57 has no free userspace driver on
+this kernel. At the automatic scale of 2.67, clients render at 3 and phoc
+downscales every window on every frame on one thread, pinning a core. The port
+fixes the scale at 3 in <code>/etc/phosh/phoc.ini</code> so buffers arrive at
+their final size, and hides the Display settings panel: a fractional scale set
+there brought the lag back and hung the interface until a reboot. Usable, but
+not 60 fps.
+
 == Known issues ==
 
 === No framebuffer console ===
@@ -352,11 +426,35 @@ The cause sits below Bluetooth, in the session layer: the device has no user
 session at all — no <code>/run/user/</code>, no session bus, and PipeWire has
 to be started by hand as root.
 
+=== No brightness control ===
+There is no <code>/sys/class/backlight</code> device, so Phosh has no
+brightness slider. The backlight is only an LED class device,
+<code>/sys/class/leds/lcd-backlight</code> (0 to 2047), and writing to it does
+reach the KTD3137 backlight chip.
+
+=== usb-signaller panics the kernel ===
+<code>usb-signaller</code> triggers a NULL dereference in
+<code>sysfs_remove_file_ns</code> while tearing down the USB gadget
+(<code>gadgets_drop</code> → <code>configfs_rmdir</code>). It is removed from
+the default runlevel. This fits the USB networking being unreliable on this
+device.
+
+=== NetworkManager can pick the wrong Wi-Fi interface ===
+gen4m creates four interfaces, and only <code>wlan0</code> is a real station.
+Left alone, <code>nmcli dev wifi connect</code> can bind the profile to
+<code>ap0</code> and fail with <code>The Wi-Fi network could not be found</code>
+while the network is right there in the scan. The port's device scripts
+include a drop-in for <code>/etc/NetworkManager/conf.d/</code> that marks
+<code>ap0</code>, <code>wlan1</code> and <code>p2p0</code> unmanaged.
+
 === Load average without CPU usage ===
 Load average settles around 15 while the CPU is 98% idle and no userspace
-process is busy — kernel threads waiting on hardware that has no Android
-services driving it. Harmless in practice, but it makes ping latency on the USB
-link jump from 0.3 ms to roughly 90 ms, which is misleading when diagnosing.
+process is busy. <code>khungtaskd</code> names the culprits:
+<code>mdrt_thread</code>, <code>mivr_thread</code>,
+<code>gauge_timer_thr</code> and the <code>wdtk-*</code> watchdog kickers —
+vendor kernel threads that sleep in state D by design. Harmless in practice,
+but it makes ping latency on the USB link jump from 0.3 ms to roughly 90 ms,
+which is misleading when diagnosing.
 
 == Debugging notes ==
 
@@ -389,6 +487,22 @@ Leaving the initramfs debug shell with <code>pmos_continue_boot</code> left the
 device without USB enumeration twice. Flashing a normal boot image and
 rebooting works. Use the debug shell for inspection, not for handing over to a
 usable system.
+
+=== Stream logs off the device ===
+Logs from a session that takes the device down cannot be kept on the device.
+<code>/tmp</code> is tmpfs, and a file created on the rootfs during the session
+is discarded as an orphan inode by the fsck at the next boot. Streaming each
+line off the device over the network is the only method that captured those
+failures.
+
+When checking that something is still alive, use <code>pgrep -x phoc</code>.
+A <code>ps aux | grep -c "[p]hoc"</code> run from a shell whose own command
+line contains the string <code>phoc</code> counts itself, and will report the
+compositor as up after it is gone.
+
+=== Reading the greeter's output ===
+The greeter's stderr goes to <code>tty7</code>. Reading
+<code>/dev/vcs7</code> is the quickest way to see why it is stuck on a spinner.
 
 == See also ==
 * [https://github.com/vitoramaral10/pmos-xiaomi-thunder pmos-xiaomi-thunder] — port sources (device package, kernel patches)
