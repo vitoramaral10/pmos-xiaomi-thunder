@@ -6,12 +6,20 @@ export XDG_CURRENT_DESKTOP=Phosh:GNOME
 # Com o backend do logind a sessao e' desativada e o phoc libera o display;
 # desligar o CRTC trava este painel e o watchdog reseta o aparelho.
 export LIBSEAT_BACKEND=seatd
-export WLR_RENDERER=pixman
+# Com o panfrost carregado (kernel r32+) a Mali-G57 tem render node: wlroots
+# compoe em GLES e o GTK desenha em GL. Sem ele, o caminho antigo: pixman,
+# cairo e Mesa por software.
+if [ -e /dev/dri/renderD128 ]; then
+	export WLR_RENDERER=gles2
+	export GSK_RENDERER=ngl
+else
+	export WLR_RENDERER=pixman
+	export GSK_RENDERER=cairo
+	export LIBGL_ALWAYS_SOFTWARE=1
+fi
 export WLR_NO_HARDWARE_CURSORS=1
 export WLR_BACKENDS=drm,libinput
-export GSK_RENDERER=cairo
 export GDK_BACKEND=wayland
-export LIBGL_ALWAYS_SOFTWARE=1
 # Dados do aparelho na frente: esconde o painel Tela do Configuracoes para a
 # escala ficar fixa em 3 (ver /usr/share/xiaomi-thunder/applications).
 export XDG_DATA_DIRS="/usr/share/xiaomi-thunder:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
