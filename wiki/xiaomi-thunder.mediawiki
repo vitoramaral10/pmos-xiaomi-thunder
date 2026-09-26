@@ -41,7 +41,7 @@
 | status_touch    = Y
 
 <!-- Multimedia Features -->
-| status_3d     = N
+| status_3d     = Y
 | status_audio  = Y
 | status_camera = N
 
@@ -60,8 +60,9 @@
 '''Bluetooth''' work, and the device boots into Phosh, associates to a network
 and brings its Bluetooth controller up on its own.
 
-Not working: modem, cameras, brightness control and GPU acceleration (the
-compositor runs on the pixman software renderer). The battery charges and, since kernel
+Not working: modem, cameras and brightness control. The GPU runs on the
+mainline panfrost driver, backported to the vendor kernel, and Phosh composes
+in GLES. The battery charges and, since kernel
 r26, the fuel gauge reports a level. SSH works over Wi-Fi but stalls over the
 USB link (see [[#Known issues]]).
 
@@ -363,13 +364,18 @@ Neither the greeter nor the user session gets a working environment by default:
 * The greeter user and the regular user in the <code>seat</code> group, and <code>stevia-schemas</code> installed — without its GSettings schema the on-screen keyboard aborts, and it is a required session component.
 
 === Performance ===
-Everything renders on the CPU — the Mali-G57 has no free userspace driver on
-this kernel. At the automatic scale of 2.67, clients render at 3 and phoc
+Since kernel r32 the Mali-G57 runs on panfrost, backported from Linux 5.15 to
+the vendor 4.19 kernel, and phoc composes in GLES through Mesa: 60 fps, with
+phoc at a few percent of one core. The GPU clock follows load between 390 and
+955 MHz through MediaTek's gpufreq, and the GPU powers off when idle. Vulkan is
+not available: Mesa's PanVK does not support Valhall Job Manager GPUs. Details:
+[https://github.com/vitoramaral10/pmos-xiaomi-thunder/blob/main/docs/gpu-bringup.md gpu-bringup.md].
+
+Before that, everything rendered on the CPU. At the automatic scale of 2.67, clients render at 3 and phoc
 downscales every window on every frame on one thread, pinning a core. The port
 fixes the scale at 3 in <code>/etc/phosh/phoc.ini</code> so buffers arrive at
 their final size, and hides the Display settings panel: a fractional scale set
-there brought the lag back and hung the interface until a reboot. Usable, but
-not 60 fps.
+there brought the lag back and hung the interface until a reboot.
 
 == Known issues ==
 

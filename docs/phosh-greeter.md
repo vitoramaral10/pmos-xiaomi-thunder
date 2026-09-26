@@ -334,7 +334,7 @@ compositors paced frames against the wrong rate. Timing vblanks with
 (kernel `r29`) sets each clock from the mode's own timings. The DSI link takes
 its rate from a separate field, so only the advertised rate changes.
 
-This makes the interface usable, but it is not 60 fps: that needs the GPU.
+This made the interface usable, but not 60 fps. That came with the GPU, in kernel `r32` — see [gpu-bringup.md](gpu-bringup.md).
 
 ### 13. The power menu does nothing
 
@@ -404,8 +404,8 @@ gets it by default. See `device-scripts/phrog-session-pixman` and
   runs, so the order no longer depends on anything.
 - A short delay before the session takes the seat. Without it the greeter's
   phoc has not released `seat0` yet and seatd drops the new connection.
-- pixman and cairo: the Mali-G57 has no free userspace driver on this kernel,
-  so everything renders in software.
+- The renderer: GLES in phoc and GL in GTK when panfrost is up
+  (`/dev/dri/renderD128` exists), pixman and cairo otherwise.
 
 ## Still open
 
@@ -417,9 +417,6 @@ with the session correctly registered in elogind. It is most likely the same
 fdinfo `EACCES` as blocker 13: polkitd could not resolve the calling process at
 all. Since kernel `r30` the power menu works; whether the agent now registers
 has still to be checked in a live session.
-
-**GPU acceleration.** The Mali-G57 runs only under the vendor's kbase driver
-(`/dev/mali0`), with no free userspace for it on this kernel.
 
 **Brightness.** There is no `/sys/class/backlight` device, so Phosh has no
 brightness slider.
