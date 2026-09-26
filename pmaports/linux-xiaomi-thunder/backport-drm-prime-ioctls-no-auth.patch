@@ -1,0 +1,18 @@
+Backport de "drm: allow render capable master with DRM_AUTH ioctls"/
+"drm: remove DRM_AUTH from PRIME_TO/FROM_HANDLE ioctls" (Linux 5.2):
+o wlroots aloca o scanout num fd nao-master do card0 e exporta por PRIME;
+no 4.19 isso da EACCES para qualquer usuario que nao seja root.
+
+--- a/drivers/gpu/drm/drm_ioctl.c	2026-09-26 11:19:51.246775576 -0300
++++ b/drivers/gpu/drm/drm_ioctl.c	2026-09-26 17:13:18.762656480 -0300
+@@ -631,8 +631,8 @@
+ 
+ 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETRESOURCES, drm_mode_getresources, DRM_UNLOCKED),
+ 
+-	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_HANDLE_TO_FD, drm_prime_handle_to_fd_ioctl, DRM_AUTH|DRM_UNLOCKED|DRM_RENDER_ALLOW),
+-	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_FD_TO_HANDLE, drm_prime_fd_to_handle_ioctl, DRM_AUTH|DRM_UNLOCKED|DRM_RENDER_ALLOW),
++	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_HANDLE_TO_FD, drm_prime_handle_to_fd_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
++	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_FD_TO_HANDLE, drm_prime_fd_to_handle_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
+ 
+ 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETPLANERESOURCES, drm_mode_getplane_res, DRM_UNLOCKED),
+ 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETCRTC, drm_mode_getcrtc, DRM_UNLOCKED),
