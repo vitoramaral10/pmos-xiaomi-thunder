@@ -88,10 +88,21 @@ Each of these looked like a panfrost problem and was a 4.19 difference:
 - A shader that never finishes is killed by the job timeout in about 0.5 s,
   the GPU resets, and the next client renders normally (5 out of 5).
 - 20 minutes of glmark2 on panfrost 5.4.302: no oops or fault, 33.5 °C peak.
+- No GPU memory leak on 5.15: over 15 runs of glmark2, one minute each with
+  the process exiting in between, `Shmem` stayed at 6.2 MB and `Slab`
+  returned to its baseline after each run.
+- System suspend (`s2idle`, woken by the RTC): with panfrost loaded and the
+  greeter composing in GLES, 3 of 3 cycles suspended and resumed, and the GPU
+  rendered afterwards. panfrost suspends in about 0.5 ms and resumes in about
+  1 ms. The same cycle also works with panfrost unloaded and with the greeter
+  on pixman.
 
 ## Still open
 
 - **Vulkan.** Mesa's PanVK builds its Job Manager backend for Bifrost only;
   Valhall v9 (G57) is skipped on purpose. It is Mesa work, not kernel work.
-- **System suspend** with panfrost loaded is untested.
-- **The long stress run** has to be repeated on the 5.15 driver.
+- **One suspend never woke up.** The very first attempt, with panfrost loaded
+  and the GPU idle, stayed asleep until a long press of the power button; the
+  RTC alarm did not wake it. It did not happen again in seven later cycles
+  across every combination above, and a hang leaves nothing in pstore, so the
+  cause is not known.
