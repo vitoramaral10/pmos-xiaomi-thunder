@@ -23,13 +23,14 @@ The device page on the official wiki is
 
 | Component | State | Notes |
 |---|---|---|
-| Display | works | software rendering only (pixman), no GPU acceleration |
+| Display | works | |
+| GPU | **works** | Mali-G57 on the mainline panfrost driver, backported to the vendor 4.19 kernel since `r32`; Phosh composes in GLES through Mesa. DVFS 390–955 MHz and power-off when idle. No Vulkan — see [gpu-bringup.md](docs/gpu-bringup.md) |
 | Touchscreen | works | needs the proprietary Novatek NT36672C firmware, see below |
 | Wi-Fi | **works** | brought up at boot by an OpenRC service. 2.4/5 GHz, WPA2 and WPA3, ~133 Mbit/s measured over LAN. The factory MAC and RF calibration are available but off by default — see [wifi-bringup.md](docs/wifi-bringup.md#the-factory-mac-solved-mechanism-unusable-in-practice) |
 | Audio (speaker) | works | headphone path written but untested |
 | USB networking | works | RNDIS, the usual pmOS `172.16.42.1` |
 | Battery | **works** | charges, and since kernel `r26` the fuel gauge reports a level: it counts down unplugged and survives a reboot. Since `r31` it reaches 100% when charging ends. The Gauge Master 3.0 algorithm runs in the kernel instead of Android's `fuelgauged` — see [phosh-greeter.md](docs/phosh-greeter.md), blockers 9 and 14 |
-| Phosh | **works** | the device boots into the greeter and the session stays up. The screen blanks and locks on idle or with the power button, with the backlight off, and the touchscreen works again on wake. The scale is fixed at 3, which keeps software rendering usable. Power off and Restart work from the menu since kernel `r30`. Software rendering only, and no brightness control yet — see [phosh-greeter.md](docs/phosh-greeter.md) |
+| Phosh | **works** | the device boots into the greeter and the session stays up. The screen blanks and locks on idle or with the power button, with the backlight off, and the touchscreen works again on wake. The scale is fixed at 3, which keeps software rendering usable. Power off and Restart work from the menu since kernel `r30`. Rendered on the GPU since `r32`; no brightness control yet — see [phosh-greeter.md](docs/phosh-greeter.md) |
 | Bluetooth | **works** | brought up at boot by an OpenRC service. Scanning and pairing verified against a Linux host, BR/EDR and LE, coexisting with Wi-Fi. Factory address read from `nvdata` at run time. **Audio does not play** — A2DP negotiates and the link carries the stream, but the device has no audio session to consume it; see [bluetooth-bringup.md](docs/bluetooth-bringup.md#audio-negotiates-but-nothing-plays) |
 | Modem | not started | |
 | Cameras | not started | |
